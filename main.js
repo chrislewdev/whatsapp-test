@@ -95,6 +95,8 @@ class WhatsAppMultiApp {
       show: false, // Don't show until ready
     });
 
+    global.mainWindow = this.mainWindow;
+
     // Enable F12 to toggle DevTools
     this.mainWindow.webContents.on("before-input-event", (event, input) => {
       if (input.key === "F12") {
@@ -167,6 +169,7 @@ class WhatsAppMultiApp {
         console.log(`QR request for account: ${accountId}`);
         const qrCode = await this.accountManager.getQRCode(accountId);
         console.log(`QR generated successfully for account: ${accountId}`);
+        console.log(`QR data status: ${qrCode.status}`);
         return { success: true, data: qrCode };
       } catch (error) {
         console.error(`QR generation failed for account ${accountId}:`, error);

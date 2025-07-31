@@ -492,11 +492,17 @@ class AccountManager {
 
         // IMPORTANT: Send QR code to frontend immediately
         if (global.mainWindow) {
+          console.log(`Sending QR code to frontend for account ${accountId}`);
           global.mainWindow.webContents.send("qr:update", {
             accountId: accountId,
             qrCode: qrCode,
           });
-          console.log(`Sent QR code to frontend for account ${accountId}`);
+          console.log(`QR code sent to frontend for account ${accountId}`);
+
+          // Add a small delay to ensure the message is processed
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        } else {
+          console.warn("Main window not available for sending QR code");
         }
 
         return {

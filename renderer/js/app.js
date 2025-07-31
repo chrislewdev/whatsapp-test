@@ -356,7 +356,15 @@ class WhatsAppMultiApp {
       this.showLoading("Creating account...");
       console.log("Starting account creation for:", accountName);
 
-      // Add timeout to prevent infinite loading
+      // Set up QR container to show loading state
+      this.elements.qrContainer.innerHTML = `
+      <div class="qr-loading">
+        <div class="loading-spinner"></div>
+        <div>Creating account...</div>
+        <div class="loading-details">Setting up isolated client...</div>
+      </div>
+    `;
+
       const createAccountPromise = window.electronAPI.account.create({
         accountId: accountId,
         displayName: accountName,
@@ -392,36 +400,65 @@ class WhatsAppMultiApp {
         this.accounts.set(accountId, accountData);
 
         this.showNotification(
-          "Account created successfully. Requesting QR code...",
+          "Account created successfully. Generating QR code...",
           "info"
         );
 
-        // Request QR code with better error handling and user feedback
-        try {
-          this.elements.qrContainer.innerHTML = `
-            <div class="qr-loading">
-              <div class="loading-spinner"></div>
-              <div>Initializing WhatsApp client...</div>
-              <div class="loading-details">This may take 30-60 seconds</div>
-            </div>
-          `;
+        // Update QR container to show QR generation state
+        this.elements.qrContainer.innerHTML = `
+        <div class="qr-loading">
+          <div class="loading-spinner"></div>
+          <div>Generating QR Code...</div>
+          <div class="loading-details">This may take 30-60 seconds</div>
+        </div>
+      `;
 
+        // Hide main loading overlay but keep QR loading
+        this.hideLoading();
+
+        try {
           console.log("Requesting QR code for account:", accountId);
           const qrResponse = await window.electronAPI.account.getQR(accountId);
 
           if (qrResponse.success) {
             if (qrResponse.data.status === "already_authenticated") {
               this.elements.qrContainer.innerHTML = `
-                <div class="qr-success">
-                  <div>✅ Account already authenticated!</div>
-                  <div>This account is ready to use.</div>
-                </div>
-              `;
+              <div class="qr-success">
+                <div>✅ Account already authenticated!</div>
+                <div>This account is ready to use.</div>
+              </div>
+            `;
               this.showNotification(
                 "Account is already authenticated and ready!",
                 "info"
               );
             } else {
+              // The QR code should be sent via IPC and handled by handleQRUpdate
+              // If not received within 5 seconds, show error
+              setTimeout(() => {
+                const currentContent = this.elements.qrContainer.innerHTML;
+                if (currentContent.includes("Generating QR Code")) {
+                  console.warn(
+                    "QR code not received via IPC, checking response data"
+                  );
+                  if (qrResponse.data.qrCode) {
+                    // Fallback: display QR directly from response
+                    this.elements.qrContainer.innerHTML = `
+                    <img src="data:image/png;base64,${qrResponse.data.qrCode}" alt="QR Code" style="max-width: 100%; height: auto; border-radius: 8px;" />
+                    <p style="margin-top: 10px; font-size: 12px; color: #666; text-align: center;">
+                      Scan this QR code with WhatsApp on your phone
+                    </p>
+                  `;
+                    console.log("QR code displayed via fallback method");
+                  } else {
+                    this.handleQRGenerationFailure(
+                      accountId,
+                      "QR code generated but not received properly"
+                    );
+                  }
+                }
+              }, 5000);
+
               this.showNotification(
                 "QR code generated. Please scan with WhatsApp mobile app.",
                 "info"
@@ -459,7 +496,10 @@ class WhatsAppMultiApp {
         );
       }
     } finally {
-      this.hideLoading();
+      // Only hide loading if we're not waiting for QR
+      if (!this.elements.qrContainer.innerHTML.includes("Generating QR Code")) {
+        this.hideLoading();
+      }
     }
   }
 
@@ -1312,19 +1352,35 @@ class WhatsAppMultiApp {
     const { accountId, qrCode } = data;
     console.log(`Received QR update for account ${accountId}`);
 
-    // Only update QR if we're currently setting up this account
-    if (this.elements.qrContainer && qrCode) {
+    // Only update QR if we're currently setting up this account AND we have the QR container visible
+    const accountSetup = this.elements.accountSetup;
+    const qrContainer = this.elements.qrContainer;
+
+    if (
+      accountSetup &&
+      !accountSetup.classList.contains("hidden") &&
+      qrContainer &&
+      qrCode
+    ) {
+      console.log(`Displaying QR code for account ${accountId}`);
       this.elements.qrContainer.innerHTML = `
-        <img src="data:image/png;base64,${qrCode}" alt="QR Code" style="max-width: 100%; height: auto;" />
-        <p style="margin-top: 10px; font-size: 12px; color: #666;">
-          Scan this QR code with WhatsApp on your phone
-        </p>
-      `;
+      <img src="data:image/png;base64,${qrCode}" alt="QR Code" style="max-width: 100%; height: auto; border-radius: 8px;" />
+      <p style="margin-top: 10px; font-size: 12px; color: #666; text-align: center;">
+        Scan this QR code with WhatsApp on your phone
+      </p>
+    `;
       console.log(`QR code displayed for account ${accountId}`);
     } else {
       console.warn(
-        `QR container not found or no QR code data for account ${accountId}`
+        `QR container not available or not in setup mode for account ${accountId}`
       );
+      console.warn(
+        `Account setup visible: ${
+          accountSetup && !accountSetup.classList.contains("hidden")
+        }`
+      );
+      console.warn(`QR container exists: ${!!qrContainer}`);
+      console.warn(`QR code data exists: ${!!qrCode}`);
     }
   }
 
