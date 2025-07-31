@@ -131,9 +131,12 @@ class WhatsAppMultiApp {
     // Account Management IPC handlers
     ipcMain.handle("account:create", async (event, accountData) => {
       try {
+        console.log(`Creating account: ${JSON.stringify(accountData)}`);
         const result = await this.accountManager.createAccount(accountData);
+        console.log(`Account created successfully: ${result.accountId}`);
         return { success: true, data: result };
       } catch (error) {
+        console.error(`Account creation failed:`, error);
         this.errorHandler.handleError("account:create", error);
         return { success: false, error: error.message };
       }
@@ -161,10 +164,32 @@ class WhatsAppMultiApp {
 
     ipcMain.handle("account:getQR", async (event, accountId) => {
       try {
+        console.log(`QR request for account: ${accountId}`);
         const qrCode = await this.accountManager.getQRCode(accountId);
+        console.log(`QR generated successfully for account: ${accountId}`);
         return { success: true, data: qrCode };
       } catch (error) {
+        console.error(`QR generation failed for account ${accountId}:`, error);
         this.errorHandler.handleError("account:getQR", error);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("account:fallbackQR", async (event, accountId) => {
+      try {
+        console.log(`Fallback QR request for account: ${accountId}`);
+        const qrCode = await this.accountManager.fallbackQRGeneration(
+          accountId
+        );
+        console.log(
+          `Fallback QR generated successfully for account: ${accountId}`
+        );
+        return { success: true, data: qrCode };
+      } catch (error) {
+        console.error(
+          `Fallback QR generation failed for account ${accountId}:`,
+          error
+        );
         return { success: false, error: error.message };
       }
     });

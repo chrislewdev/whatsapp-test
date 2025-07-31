@@ -80,31 +80,154 @@
   font-weight: 300;
 }
 
-/* QR Error Styling */
-.qr-error {
+/* Enhanced QR loading and error states */
+.qr-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  height: 100%;
+  color: var(--text-muted);
+  padding: var(--spacing-xl);
+}
+
+.qr-loading .loading-details {
+  font-size: var(--font-size-small);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.qr-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  height: 100%;
+  color: var(--primary-green);
+  font-weight: 500;
   text-align: center;
+  padding: var(--spacing-xl);
+}
+
+.qr-error {
+  text-align: left;
   padding: var(--spacing-lg);
   color: var(--text-secondary);
+  max-height: 240px;
+  overflow-y: auto;
 }
 
-.qr-error p {
+.qr-error .error-icon {
+  font-size: 24px;
+  text-align: center;
   margin-bottom: var(--spacing-sm);
+}
+
+.qr-error .error-main h4 {
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-medium);
+}
+
+.qr-error .error-main p {
+  margin-bottom: var(--spacing-md);
   font-size: var(--font-size-small);
 }
 
-.qr-error button {
+.qr-error .error-details {
+  margin: var(--spacing-md) 0;
+}
+
+.qr-error details {
+  background: var(--background-light);
+  border-radius: 4px;
+  padding: var(--spacing-sm);
+}
+
+.qr-error summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+}
+
+.qr-error code {
+  display: block;
+  margin-top: var(--spacing-xs);
+  padding: var(--spacing-xs);
+  background: var(--panel-bg);
+  border-radius: 4px;
+  font-size: 11px;
+  word-wrap: break-word;
+  color: #d63384;
+}
+
+.troubleshooting-tips {
+  background: #f8f9fa;
+  border-left: 3px solid #0dcaf0;
+  padding: var(--spacing-sm);
+  margin: var(--spacing-sm) 0;
+  border-radius: 4px;
+}
+
+.troubleshooting-tips p {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: var(--font-size-small);
+}
+
+.troubleshooting-tips ul {
+  margin: var(--spacing-xs) 0 var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-small);
+}
+
+.troubleshooting-tips li {
+  margin-bottom: 2px;
+}
+
+.error-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.error-actions button {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: none;
+  border-radius: 4px;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+  transition: var(--transition);
+  flex: 1;
+  min-width: 80px;
+}
+
+.btn-retry {
   background: var(--primary-green);
   color: white;
-  border: none;
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  font-size: var(--font-size-small);
-  transition: var(--transition);
+}
+.btn-retry:hover {
+  background: var(--primary-green-dark);
 }
 
-.qr-error button:hover {
-  background: var(--primary-green-dark);
+.btn-advanced {
+  background: #ffc107;
+  color: #000;
+}
+.btn-advanced:hover {
+  background: #ffca28;
+}
+
+.btn-cancel {
+  background: var(--background-light);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+}
+.btn-cancel:hover {
+  background: var(--border-light);
+  color: var(--text-primary);
 }
 
 /* Loading States */

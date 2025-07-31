@@ -396,50 +396,46 @@ class WhatsAppMultiApp {
           "info"
         );
 
-        // Request QR code with timeout
+        // Request QR code with better error handling and user feedback
         try {
-          this.elements.qrContainer.innerHTML =
-            '<div class="qr-loading">Generating QR code...</div>';
+          this.elements.qrContainer.innerHTML = `
+            <div class="qr-loading">
+              <div class="loading-spinner"></div>
+              <div>Initializing WhatsApp client...</div>
+              <div class="loading-details">This may take 30-60 seconds</div>
+            </div>
+          `;
 
-          const qrPromise = window.electronAPI.account.getQR(accountId);
-          const qrTimeoutPromise = new Promise((_, reject) => {
-            setTimeout(
-              () => reject(new Error("QR code generation timed out")),
-              20000
-            );
-          });
-
-          const qrResponse = await Promise.race([qrPromise, qrTimeoutPromise]);
+          console.log("Requesting QR code for account:", accountId);
+          const qrResponse = await window.electronAPI.account.getQR(accountId);
 
           if (qrResponse.success) {
-            this.showNotification(
-              "QR code generated. Please scan with WhatsApp mobile app.",
-              "info"
-            );
+            if (qrResponse.data.status === "already_authenticated") {
+              this.elements.qrContainer.innerHTML = `
+                <div class="qr-success">
+                  <div>✅ Account already authenticated!</div>
+                  <div>This account is ready to use.</div>
+                </div>
+              `;
+              this.showNotification(
+                "Account is already authenticated and ready!",
+                "info"
+              );
+            } else {
+              this.showNotification(
+                "QR code generated. Please scan with WhatsApp mobile app.",
+                "info"
+              );
+            }
           } else {
             console.error("QR generation failed:", qrResponse.error);
-            this.elements.qrContainer.innerHTML = `
-              <div class="qr-error">
-                <p>QR code generation failed</p>
-                <button onclick="window.WhatsAppApp.retryQRGeneration('${accountId}')">Retry</button>
-              </div>
-            `;
-            this.showNotification(
-              "QR code generation failed. Try clicking Retry.",
-              "error"
-            );
+            this.handleQRGenerationFailure(accountId, qrResponse.error);
           }
         } catch (qrError) {
           console.error("QR generation error:", qrError);
-          this.elements.qrContainer.innerHTML = `
-            <div class="qr-error">
-              <p>QR code generation timed out</p>
-              <button onclick="window.WhatsAppApp.retryQRGeneration('${accountId}')">Retry</button>
-            </div>
-          `;
-          this.showNotification(
-            "QR code generation timed out. Try clicking Retry.",
-            "error"
+          this.handleQRGenerationFailure(
+            accountId,
+            qrError.message || "Unknown error occurred"
           );
         }
       } else {
@@ -498,6 +494,219 @@ class WhatsAppMultiApp {
         "Retry failed. Please check console for details.",
         "error"
       );
+    }
+  }
+
+  /**
+   * Handle QR generation failure with user-friendly options
+   */
+  handleQRGenerationFailure(accountId, errorMessage) {
+    const isTimeoutError =
+      errorMessage.includes("timed out") || errorMessage.includes("timeout");
+    const isNetworkError =
+      errorMessage.includes("network") || errorMessage.includes("connection");
+
+    let errorExplanation = "";
+    let troubleshootingTips = "";
+
+    if (isTimeoutError) {
+      errorExplanation = "The WhatsApp client took too long to initialize.";
+      troubleshootingTips = `
+        <div class="troubleshooting-tips">
+          <p><strong>Common causes:</strong></p>
+          <ul>
+            <li>Slow internet connection</li>
+            <li>System resources being used by other apps</li>
+            <li>Antivirus software blocking the process</li>
+          </ul>
+          <p><strong>Try:</strong></p>
+          <ul>
+            <li>Close other applications to free up memory</li>
+            <li>Check your internet connection</li>
+            <li>Temporarily disable antivirus</li>
+          </ul>
+        </div>
+      `;
+    } else if (isNetworkError) {
+      errorExplanation = "Unable to connect to WhatsApp servers.";
+      troubleshootingTips = `
+        <div class="troubleshooting-tips">
+          <p><strong>Please check:</strong></p>
+          <ul>
+            <li>Your internet connection</li>
+            <li>Firewall settings</li>
+            <li>VPN or proxy settings</li>
+          </ul>
+        </div>
+      `;
+    } else {
+      errorExplanation = "An unexpected error occurred during setup.";
+    }
+
+    this.elements.qrContainer.innerHTML = `
+      <div class="qr-error">
+        <div class="error-icon">⚠️</div>
+        <div class="error-main">
+          <h4>QR Code Generation Failed</h4>
+          <p>${errorExplanation}</p>
+        </div>
+        <div class="error-details">
+          <details>
+            <summary>Technical Details</summary>
+            <code>${errorMessage}</code>
+          </details>
+        </div>
+        ${troubleshootingTips}
+        <div class="error-actions">
+          <button onclick="window.WhatsAppApp.retryQRGeneration('${accountId}')" class="btn-retry">
+            🔄 Try Again
+          </button>
+          <button onclick="window.WhatsAppApp.advancedRetry('${accountId}')" class="btn-advanced">
+            🔧 Advanced Retry
+          </button>
+          <button onclick="window.WhatsAppApp.cancelAccountSetup('${accountId}')" class="btn-cancel">
+            ❌ Cancel
+          </button>
+        </div>
+      </div>
+    `;
+
+    this.showNotification(`QR generation failed: ${errorExplanation}`, "error");
+  }
+
+  /**
+   * Advanced retry with fallback methods
+   */
+  async advancedRetry(accountId) {
+    try {
+      this.elements.qrContainer.innerHTML =
+        '<div class="qr-loading"><div class="loading-spinner"></div><div>Trying advanced retry method...</div></div>';
+
+      this.showNotification(
+        "Attempting advanced retry with fallback...",
+        "info"
+      );
+
+      // First try the normal method once more
+      let response;
+      try {
+        const qrPromise = window.electronAPI.account.getQR(accountId);
+        const qrTimeoutPromise = new Promise((_, reject) => {
+          setTimeout(
+            () => reject(new Error("Advanced retry timed out")),
+            60000
+          );
+        });
+        response = await Promise.race([qrPromise, qrTimeoutPromise]);
+      } catch (normalRetryError) {
+        console.log("Normal retry failed, trying fallback method...");
+
+        // Try fallback method
+        this.elements.qrContainer.innerHTML =
+          '<div class="qr-loading"><div class="loading-spinner"></div><div>Trying fallback method...</div><div class="loading-details">Using minimal settings...</div></div>';
+
+        // Note: You'd need to add this IPC handler
+        const fallbackPromise =
+          window.electronAPI.account.fallbackQR(accountId);
+        const fallbackTimeoutPromise = new Promise((_, reject) => {
+          setTimeout(
+            () => reject(new Error("Fallback method timed out")),
+            90000
+          );
+        });
+        response = await Promise.race([
+          fallbackPromise,
+          fallbackTimeoutPromise,
+        ]);
+      }
+
+      if (response.success) {
+        this.showNotification(
+          "QR code generated successfully with advanced retry!",
+          "info"
+        );
+      } else {
+        throw new Error(response.error);
+      }
+    } catch (error) {
+      console.error("Advanced retry error:", error);
+      this.elements.qrContainer.innerHTML = `
+        <div class="qr-error">
+          <div class="error-icon">❌</div>
+          <div class="error-main">
+            <h4>All Retry Methods Failed</h4>
+            <p>We've tried multiple approaches but couldn't generate a QR code.</p>
+          </div>
+          <div class="troubleshooting-tips">
+            <p><strong>This might help:</strong></p>
+            <ul>
+              <li>Restart the application completely</li>
+              <li>Check if Chrome/Chromium is installed on your system</li>
+              <li>Temporarily disable antivirus/firewall</li>
+              <li>Free up system memory (close other apps)</li>
+              <li>Try running as administrator</li>
+            </ul>
+          </div>
+          <div class="error-actions">
+            <button onclick="window.WhatsAppApp.restartApp()" class="btn-retry">
+              🔄 Restart App
+            </button>
+            <button onclick="window.WhatsAppApp.cancelAccountSetup('${accountId}')" class="btn-cancel">
+              ❌ Cancel Setup
+            </button>
+          </div>
+        </div>
+      `;
+      this.showNotification(
+        "All retry methods failed. Try restarting the app.",
+        "error"
+      );
+    }
+  }
+
+  /**
+   * Restart the application
+   */
+  restartApp() {
+    if (
+      window.electronAPI &&
+      window.electronAPI.system &&
+      window.electronAPI.system.restart
+    ) {
+      window.electronAPI.system.restart();
+    } else {
+      // Fallback: reload the window
+      window.location.reload();
+    }
+  }
+
+  /**
+   * Cancel account setup and remove failed account
+   */
+  async cancelAccountSetup(accountId) {
+    try {
+      // Remove from local accounts
+      this.accounts.delete(accountId);
+
+      // Remove tab
+      const tab = this.elements.accountTabs?.querySelector(
+        `[data-account-id="${accountId}"]`
+      );
+      if (tab) {
+        tab.remove();
+      }
+
+      // Show appropriate screen
+      if (this.accounts.size > 0) {
+        this.showChatInterface();
+      } else {
+        this.showWelcomeScreen();
+      }
+
+      this.showNotification("Account setup cancelled", "info");
+    } catch (error) {
+      console.error("Error cancelling account setup:", error);
+      this.showNotification("Error cancelling setup", "error");
     }
   }
 
