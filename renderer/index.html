@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Multi-Account Desktop</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+    <!-- Main Application Container -->
+    <div id="app" class="app-container">
+        
+        <!-- Top Navigation Bar with Account Tabs -->
+        <header class="top-bar">
+            <div class="app-title">
+                <h1>WhatsApp Multi</h1>
+                <span class="version">v1.0</span>
+            </div>
+            
+            <!-- Account Tabs -->
+            <div class="account-tabs" id="accountTabs">
+                <button class="tab-btn add-account" id="addAccountBtn" title="Add New Account">
+                    <span class="icon">+</span>
+                </button>
+            </div>
+            
+            <!-- System Status & Settings -->
+            <div class="top-controls">
+                <button class="control-btn" id="autoMessageBtn" title="Auto Messaging">
+                    <span class="icon">⏰</span>
+                </button>
+                <button class="control-btn" id="settingsBtn" title="Settings">
+                    <span class="icon">⚙️</span>
+                </button>
+                <div class="status-indicator" id="statusIndicator">
+                    <span class="status-dot offline"></span>
+                    <span class="status-text">Offline</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Welcome Screen (shown when no accounts) -->
+            <div class="welcome-screen" id="welcomeScreen">
+                <div class="welcome-content">
+                    <h2>Welcome to WhatsApp Multi</h2>
+                    <p>Manage multiple WhatsApp accounts from one desktop app</p>
+                    <button class="btn-primary" id="getStartedBtn">
+                        <span class="icon">+</span>
+                        Add Your First Account
+                    </button>
+                </div>
+            </div>
+
+            <!-- Account Setup Screen -->
+            <div class="account-setup hidden" id="accountSetup">
+                <div class="setup-content">
+                    <h2>Add WhatsApp Account</h2>
+                    <div class="setup-form">
+                        <div class="form-group">
+                            <label for="accountName">Account Name:</label>
+                            <input type="text" id="accountName" placeholder="e.g., Personal, Work" required>
+                        </div>
+                        <div class="qr-section">
+                            <p>Scan QR code with your WhatsApp mobile app:</p>
+                            <div class="qr-container" id="qrContainer">
+                                <div class="qr-loading">Generating QR code...</div>
+                            </div>
+                        </div>
+                        <div class="setup-actions">
+                            <button class="btn-secondary" id="cancelSetupBtn">Cancel</button>
+                            <button class="btn-primary" id="confirmSetupBtn" disabled>Add Account</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Chat Interface -->
+            <div class="chat-interface hidden" id="chatInterface">
+                <!-- Sidebar with Chat List -->
+                <aside class="sidebar">
+                    <div class="sidebar-header">
+                        <div class="account-info" id="currentAccountInfo">
+                            <div class="account-avatar">
+                                <span class="avatar-text">?</span>
+                            </div>
+                            <div class="account-details">
+                                <span class="account-name">Loading...</span>
+                                <span class="account-status">Connecting...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search Bar -->
+                    <div class="search-section">
+                        <div class="search-bar">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="chatSearch" placeholder="Search chats...">
+                        </div>
+                    </div>
+
+                    <!-- Chat List -->
+                    <div class="chat-list" id="chatList">
+                        <div class="chat-list-loading">
+                            <div class="loading-spinner"></div>
+                            <span>Loading chats...</span>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Main Chat Area -->
+                <div class="chat-area">
+                    <!-- Chat Header -->
+                    <div class="chat-header" id="chatHeader">
+                        <div class="chat-info">
+                            <div class="contact-avatar">
+                                <span class="avatar-text">?</span>
+                            </div>
+                            <div class="contact-details">
+                                <span class="contact-name">Select a chat</span>
+                                <span class="contact-status">to start messaging</span>
+                            </div>
+                        </div>
+                        <div class="chat-actions">
+                            <button class="action-btn" id="voiceCallBtn" title="Voice Call">📞</button>
+                            <button class="action-btn" id="videoCallBtn" title="Video Call">📹</button>
+                            <button class="action-btn" id="chatMenuBtn" title="Menu">⋮</button>
+                        </div>
+                    </div>
+
+                    <!-- Messages Container -->
+                    <div class="messages-container" id="messagesContainer">
+                        <div class="no-chat-selected">
+                            <div class="no-chat-content">
+                                <h3>WhatsApp Multi-Account</h3>
+                                <p>Select a chat from the sidebar to start messaging</p>
+                                <p class="hint">You can switch between accounts using the tabs above</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Message Input Area -->
+                    <div class="message-input-area" id="messageInputArea">
+                        <div class="input-container">
+                            <button class="input-btn" id="attachBtn" title="Attach file">📎</button>
+                            <div class="message-input-wrapper">
+                                <textarea 
+                                    id="messageInput" 
+                                    placeholder="Type a message..." 
+                                    rows="1"
+                                    disabled
+                                ></textarea>
+                                <button class="emoji-btn" id="emojiBtn" title="Emoji">😊</button>
+                            </div>
+                            <button class="send-btn" id="sendBtn" title="Send message" disabled>
+                                <span class="send-icon">➤</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Auto-Messaging Panel (Modal) -->
+        <div class="modal-overlay hidden" id="autoMessageModal">
+            <div class="modal-content auto-message-modal">
+                <div class="modal-header">
+                    <h2>Auto Messaging</h2>
+                    <button class="close-btn" id="closeAutoMessageBtn">×</button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="auto-message-tabs">
+                        <button class="tab-btn active" data-tab="scheduled">Scheduled Messages</button>
+                        <button class="tab-btn" data-tab="templates">Templates</button>
+                    </div>
+
+                    <!-- Scheduled Messages Tab -->
+                    <div class="tab-content" id="scheduledTab">
+                        <div class="section-header">
+                            <h3>Schedule New Message</h3>
+                            <button class="btn-primary small" id="newScheduleBtn">+ New Schedule</button>
+                        </div>
+
+                        <!-- Schedule Form -->
+                        <div class="schedule-form hidden" id="scheduleForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="scheduleAccount">Account:</label>
+                                    <select id="scheduleAccount" required>
+                                        <option value="">Select Account</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="schedulePhone">Phone Number:</label>
+                                    <input type="tel" id="schedulePhone" placeholder="+1234567890" required>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="scheduleMessage">Message:</label>
+                                <textarea id="scheduleMessage" placeholder="Enter your message..." rows="3" required></textarea>
+                                <small>Use {name}, {date}, {time} as variables</small>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="scheduleType">Schedule Type:</label>
+                                    <select id="scheduleType" required>
+                                        <option value="once">Send Once</option>
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="scheduleDateTime">Date & Time:</label>
+                                    <input type="datetime-local" id="scheduleDateTime" required>
+                                </div>
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button class="btn-secondary" id="cancelScheduleBtn">Cancel</button>
+                                <button class="btn-primary" id="saveScheduleBtn">Schedule Message</button>
+                            </div>
+                        </div>
+
+                        <!-- Scheduled Messages List -->
+                        <div class="scheduled-list" id="scheduledList">
+                            <div class="list-loading">Loading scheduled messages...</div>
+                        </div>
+                    </div>
+
+                    <!-- Templates Tab -->
+                    <div class="tab-content hidden" id="templatesTab">
+                        <div class="section-header">
+                            <h3>Message Templates</h3>
+                            <button class="btn-primary small" id="newTemplateBtn">+ New Template</button>
+                        </div>
+
+                        <!-- Template Form -->
+                        <div class="template-form hidden" id="templateForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="templateName">Template Name:</label>
+                                    <input type="text" id="templateName" placeholder="e.g., Morning Greeting" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="templateCategory">Category:</label>
+                                    <select id="templateCategory">
+                                        <option value="personal">Personal</option>
+                                        <option value="work">Work</option>
+                                        <option value="general">General</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="templateContent">Template Content:</label>
+                                <textarea id="templateContent" placeholder="Enter template content..." rows="4" required></textarea>
+                                <small>Use {name}, {date}, {time} as variables</small>
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button class="btn-secondary" id="cancelTemplateBtn">Cancel</button>
+                                <button class="btn-primary" id="saveTemplateBtn">Save Template</button>
+                            </div>
+                        </div>
+
+                        <!-- Templates List -->
+                        <div class="templates-list" id="templatesList">
+                            <div class="list-loading">Loading templates...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div class="modal-overlay hidden" id="settingsModal">
+            <div class="modal-content settings-modal">
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <button class="close-btn" id="closeSettingsBtn">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="settings-section">
+                        <h3>Application Settings</h3>
+                        <div class="setting-item">
+                            <label class="setting-label">
+                                <input type="checkbox" id="startMinimized"> Start minimized
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label class="setting-label">
+                                <input type="checkbox" id="enableNotifications" checked> Enable notifications
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label class="setting-label">Theme:</label>
+                            <select id="themeSelect">
+                                <option value="light">Light</option>
+                                <option value="dark">Dark</option>
+                                <option value="auto">Auto</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <h3>Account Management</h3>
+                        <div class="accounts-overview" id="accountsOverview">
+                            <div class="loading">Loading accounts...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification Container -->
+        <div class="notification-container" id="notificationContainer">
+            <!-- Notifications will be inserted here -->
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay hidden" id="loadingOverlay">
+            <div class="loading-content">
+                <div class="loading-spinner large"></div>
+                <span class="loading-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Files -->
+    <script src="js/app.js"></script>
+    <script src="js/tabs.js"></script>
+    <script src="js/chat-ui.js"></script>
+    <script src="js/auto-messaging-ui.js"></script>
+
+</body>
+</html>

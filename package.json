@@ -1,0 +1,41 @@
+{
+  "name": "whatsapp-multi-desktop",
+  "version": "1.0.0",
+  "description": "WhatsApp Multi-Account Desktop App for Personal Use",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "test": "echo \"Basic testing - manual for now\""
+  },
+  "keywords": [
+    "whatsapp",
+    "multi-account",
+    "desktop",
+    "electron"
+  ],
+  "author": "Personal Project",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.31.0"
+  },
+  "build": {
+    "appId": "com.personal.whatsapp-multi",
+    "productName": "WhatsApp Multi",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*",
+      "config/**/*"
+    ]
+  }
+}
