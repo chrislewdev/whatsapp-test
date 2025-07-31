@@ -211,8 +211,9 @@ class AccountManager {
       this.errorHandler.handleAccountError(accountId, error, "client_error");
     });
   }
+
   /**
-   * Get QR code for account authentication with improved initialization
+   * Get QR code with multiple fallback strategies
    */
   async getQRCode(accountId) {
     const account = this.accounts.get(accountId);
@@ -226,89 +227,106 @@ class AccountManager {
 
     console.log(`Starting QR generation for account: ${accountId}`);
 
+    let simpleError, directError, minimalError; // Declare variables at function scope
+
+    // Strategy 1: Try simplified whatsapp-web.js approach
     try {
-      // First, try to destroy any existing client
+      console.log(
+        `Trying simplified whatsapp-web.js approach for account: ${accountId}`
+      );
+
       if (account.client) {
         try {
           await account.client.destroy();
-          console.log(`Destroyed existing client for account: ${accountId}`);
-        } catch (destroyError) {
-          console.warn(
-            `Failed to destroy existing client: ${destroyError.message}`
-          );
+        } catch (e) {
+          console.warn(`Client cleanup warning: ${e.message}`);
         }
       }
 
-      // Create new client with retries
-      const maxRetries = 3;
-      let lastError;
+      const newClient = await this.createIsolatedClient(accountId);
+      account.client = newClient;
+      this.setupClientEventHandlers(newClient, accountId);
 
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        console.log(
-          `QR generation attempt ${attempt}/${maxRetries} for account: ${accountId}`
-        );
-
-        try {
-          // Create fresh client for this attempt
-          const newClient = await this.createIsolatedClient(accountId);
-          account.client = newClient;
-
-          // Set up event handlers
-          this.setupClientEventHandlers(newClient, accountId);
-
-          // Wait for QR with timeout
-          const result = await this.waitForQR(newClient, accountId, attempt);
-          console.log(`QR generation successful for account: ${accountId}`);
-          return result;
-        } catch (attemptError) {
-          lastError = attemptError;
-          console.error(
-            `QR generation attempt ${attempt} failed for account ${accountId}:`,
-            attemptError.message
-          );
-
-          // Clean up failed client
-          try {
-            if (account.client) {
-              await account.client.destroy();
-            }
-          } catch (cleanupError) {
-            console.warn(
-              `Cleanup error after attempt ${attempt}:`,
-              cleanupError.message
-            );
-          }
-
-          // Wait before retry (except last attempt)
-          if (attempt < maxRetries) {
-            const delay = attempt * 2000; // 2s, 4s delays
-            console.log(`Waiting ${delay}ms before next attempt...`);
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          }
-        }
-      }
-
-      throw new Error(
-        `Failed to generate QR after ${maxRetries} attempts. Last error: ${lastError.message}`
-      );
+      const result = await this.waitForQR(newClient, accountId, 1);
+      console.log(`Simplified approach successful for account: ${accountId}`);
+      return result;
     } catch (error) {
-      console.error(`QR generation failed for account ${accountId}:`, error);
-      throw error;
+      simpleError = error; // Now properly scoped
+      console.log(
+        `Simplified approach failed for account ${accountId}: ${error.message}`
+      );
+
+      // Clean up failed client
+      try {
+        if (account.client) {
+          await account.client.destroy();
+        }
+      } catch (e) {
+        console.warn(`Cleanup warning: ${e.message}`);
+      }
     }
+
+    // Strategy 2: Try direct Puppeteer approach
+    try {
+      console.log(`Trying direct Puppeteer approach for account: ${accountId}`);
+      const result = await this.directPuppeteerQR(accountId);
+      console.log(
+        `Direct Puppeteer approach successful for account: ${accountId}`
+      );
+      return result;
+    } catch (error) {
+      directError = error; // Now properly scoped
+      console.log(
+        `Direct Puppeteer approach failed for account ${accountId}: ${error.message}`
+      );
+    }
+
+    // Strategy 3: Try absolute minimal settings
+    try {
+      console.log(`Trying minimal settings approach for account: ${accountId}`);
+
+      const minimalClient = new Client({
+        authStrategy: new LocalAuth({
+          clientId: `account_${accountId}`,
+          dataPath: path.join("./data/accounts", accountId),
+        }),
+        puppeteer: {
+          headless: true,
+          args: ["--no-sandbox"],
+        },
+      });
+
+      account.client = minimalClient;
+      this.setupClientEventHandlers(minimalClient, accountId);
+
+      const result = await this.waitForQR(minimalClient, accountId, 1);
+      console.log(
+        `Minimal settings approach successful for account: ${accountId}`
+      );
+      return result;
+    } catch (error) {
+      minimalError = error; // Now properly scoped
+      console.log(
+        `Minimal settings approach failed for account ${accountId}: ${error.message}`
+      );
+    }
+
+    // All strategies failed
+    throw new Error(
+      `All QR generation strategies failed. Simplified: ${simpleError?.message}, Direct: ${directError?.message}, Minimal: ${minimalError?.message}`
+    );
   }
 
   /**
-   * Wait for QR code generation with proper timeout handling
+   * Simplified QR waiting with basic timeout
    */
   async waitForQR(client, accountId, attempt) {
     return new Promise((resolve, reject) => {
       let isResolved = false;
-      let qrTimeout;
-      let healthCheckInterval;
+      let timeoutId;
 
       const cleanup = () => {
-        if (qrTimeout) clearTimeout(qrTimeout);
-        if (healthCheckInterval) clearInterval(healthCheckInterval);
+        if (timeoutId) clearTimeout(timeoutId);
       };
 
       const resolveOnce = (result) => {
@@ -327,8 +345,8 @@ class AccountManager {
         }
       };
 
-      // Set up event handlers
-      const onQR = (qr) => {
+      // QR code received
+      client.once("qr", (qr) => {
         console.log(
           `QR code received for account ${accountId} (attempt ${attempt})`
         );
@@ -337,104 +355,184 @@ class AccountManager {
           qrCode: qr,
           status: "qr_generated",
         });
-      };
+      });
 
-      const onReady = () => {
+      // Client ready (already authenticated)
+      client.once("ready", () => {
         console.log(`Client already authenticated for account ${accountId}`);
         resolveOnce({
           accountId,
           status: "already_authenticated",
         });
-      };
-
-      const onAuthFailure = (msg) => {
-        console.error(`Auth failure for account ${accountId}:`, msg);
-        rejectOnce(new Error(`Authentication failed: ${msg}`));
-      };
-
-      const onDisconnected = (reason) => {
-        console.error(
-          `Client disconnected during init for account ${accountId}:`,
-          reason
-        );
-        rejectOnce(new Error(`Disconnected during initialization: ${reason}`));
-      };
-
-      // Add event listeners
-      client.once("qr", onQR);
-      client.once("ready", onReady);
-      client.once("auth_failure", onAuthFailure);
-      client.once("disconnected", onDisconnected);
-
-      // Health check to detect if client becomes unresponsive
-      let healthCheckCount = 0;
-      healthCheckInterval = setInterval(() => {
-        healthCheckCount++;
-        console.log(
-          `Health check ${healthCheckCount} for account ${accountId} (attempt ${attempt})`
-        );
-
-        // Check if client is still alive by trying to access its properties
-        try {
-          if (!client.pupPage || client.pupPage.isClosed()) {
-            rejectOnce(new Error("Browser page was closed unexpectedly"));
-            return;
-          }
-        } catch (error) {
-          console.warn(
-            `Health check failed for account ${accountId}:`,
-            error.message
-          );
-        }
-
-        // If we've been waiting too long, something is wrong
-        if (healthCheckCount > 12) {
-          // 12 * 5s = 60s
-          rejectOnce(
-            new Error("Client appears to be unresponsive (health check failed)")
-          );
-        }
-      }, 5000);
-
-      // Set overall timeout
-      const timeoutDuration = 70000; // 70 seconds
-      qrTimeout = setTimeout(() => {
-        rejectOnce(
-          new Error(
-            `Client initialization timed out after ${
-              timeoutDuration / 1000
-            }s (attempt ${attempt})`
-          )
-        );
-      }, timeoutDuration);
-
-      // Initialize client with additional error handling
-      const initPromise = client.initialize();
-
-      initPromise.catch((initError) => {
-        console.error(
-          `Client.initialize() failed for account ${accountId} (attempt ${attempt}):`,
-          initError.message
-        );
-
-        // Don't immediately reject, sometimes the client recovers from init errors
-        setTimeout(() => {
-          if (!isResolved) {
-            rejectOnce(
-              new Error(`Initialization failed: ${initError.message}`)
-            );
-          }
-        }, 5000); // Give it 5 seconds to recover
       });
 
+      // Authentication failure
+      client.once("auth_failure", (msg) => {
+        console.error(`Auth failure for account ${accountId}:`, msg);
+        rejectOnce(new Error(`Authentication failed: ${msg}`));
+      });
+
+      // Client disconnection
+      client.once("disconnected", (reason) => {
+        console.error(`Client disconnected for account ${accountId}:`, reason);
+        rejectOnce(new Error(`Client disconnected: ${reason}`));
+      });
+
+      // Simple timeout - no health checks
+      timeoutId = setTimeout(() => {
+        console.error(
+          `Timeout waiting for QR for account ${accountId} (attempt ${attempt})`
+        );
+        rejectOnce(
+          new Error(
+            `QR generation timed out after 90 seconds (attempt ${attempt})`
+          )
+        );
+      }, 90000); // 90 seconds
+
+      // Initialize client
       console.log(
-        `Waiting for QR or ready event for account ${accountId} (attempt ${attempt}, timeout: ${timeoutDuration}ms)`
+        `Initializing client for account ${accountId} (attempt ${attempt})`
       );
+      client.initialize().catch((error) => {
+        console.error(
+          `Client initialization error for account ${accountId}:`,
+          error
+        );
+        rejectOnce(new Error(`Client initialization failed: ${error.message}`));
+      });
     });
   }
 
   /**
-   * Create isolated WhatsApp client with Electron-optimized settings
+   * Alternative QR generation using direct puppeteer approach
+   */
+  async directPuppeteerQR(accountId) {
+    console.log(`Trying direct Puppeteer approach for account: ${accountId}`);
+
+    const puppeteer = require("puppeteer");
+    let browser;
+    let page;
+
+    try {
+      // Launch browser directly
+      browser = await puppeteer.launch({
+        headless: "new",
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+        ],
+        timeout: 60000,
+      });
+
+      page = await browser.newPage();
+
+      // Set a realistic user agent
+      await page.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      );
+
+      // Navigate to WhatsApp Web
+      console.log("Navigating to WhatsApp Web...");
+      await page.goto("https://web.whatsapp.com", {
+        waitUntil: "networkidle2",
+        timeout: 45000,
+      });
+
+      console.log("Navigated to WhatsApp Web, waiting for QR code...");
+
+      // Try multiple QR code selectors
+      const qrSelectors = [
+        'canvas[aria-label="Scan me!"]',
+        'canvas[role="img"]',
+        "div[data-ref] canvas",
+        "canvas",
+        '[data-testid="qr-code"] canvas',
+      ];
+
+      let qrElement;
+      let usedSelector;
+
+      for (const selector of qrSelectors) {
+        try {
+          console.log(`Trying QR selector: ${selector}`);
+          await page.waitForSelector(selector, { timeout: 10000 });
+          qrElement = await page.$(selector);
+          if (qrElement) {
+            usedSelector = selector;
+            console.log(`Found QR code with selector: ${selector}`);
+            break;
+          }
+        } catch (selectorError) {
+          console.log(`Selector ${selector} failed: ${selectorError.message}`);
+          continue;
+        }
+      }
+
+      if (!qrElement) {
+        // Take a screenshot for debugging
+        await page.screenshot({ path: `debug_${accountId}.png` });
+        throw new Error(
+          "Could not find QR code element with any known selector"
+        );
+      }
+
+      // Get QR code as base64
+      const qrCode = await page.evaluate((selector) => {
+        const canvas = document.querySelector(selector);
+        if (canvas) {
+          return canvas.toDataURL().split(",")[1];
+        }
+        return null;
+      }, usedSelector);
+
+      if (qrCode) {
+        console.log(`Direct QR code generated for account ${accountId}`);
+
+        // IMPORTANT: Send QR code to frontend immediately
+        if (global.mainWindow) {
+          global.mainWindow.webContents.send("qr:update", {
+            accountId: accountId,
+            qrCode: qrCode,
+          });
+          console.log(`Sent QR code to frontend for account ${accountId}`);
+        }
+
+        return {
+          accountId,
+          qrCode: qrCode,
+          status: "qr_generated",
+        };
+      } else {
+        throw new Error("Could not extract QR code from canvas element");
+      }
+    } catch (error) {
+      console.error(
+        `Direct Puppeteer QR failed for account ${accountId}:`,
+        error
+      );
+      throw error;
+    } finally {
+      if (page) {
+        try {
+          await page.close();
+        } catch (e) {
+          console.warn(`Page close warning: ${e.message}`);
+        }
+      }
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (e) {
+          console.warn(`Browser close warning: ${e.message}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Create isolated WhatsApp client with simplified settings
    */
   async createIsolatedClient(accountId) {
     const accountDataPath = path.join("./data/accounts", accountId);
@@ -451,72 +549,52 @@ class AccountManager {
       fs.mkdirSync(chromeProfilePath, { recursive: true });
     }
 
-    console.log(`Creating client for account ${accountId}`);
+    console.log(
+      `Creating client for account ${accountId} with simplified settings`
+    );
 
-    // Get Electron's Chrome executable path for better compatibility
-    const { app } = require("electron");
+    // Try to find Chrome executable paths
+    const possiblePaths = [
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+      process.env.CHROME_BIN,
+      process.env.GOOGLE_CHROME_BIN,
+    ].filter(Boolean);
+
     let executablePath;
-    try {
-      // Try to use Electron's Chrome
-      executablePath = app.getPath("exe").replace("electron.exe", "chrome.exe");
-      if (!fs.existsSync(executablePath)) {
-        executablePath = undefined; // Let puppeteer find Chrome
+    for (const path of possiblePaths) {
+      if (fs.existsSync(path)) {
+        executablePath = path;
+        console.log(`Found Chrome at: ${path}`);
+        break;
       }
-    } catch (error) {
-      console.log("Could not get Electron Chrome path, using system Chrome");
-      executablePath = undefined;
     }
 
-    // Create client with Electron-compatible settings
+    // Create client with minimal, reliable settings
     const client = new Client({
       authStrategy: new LocalAuth({
         clientId: `account_${accountId}`,
         dataPath: accountDataPath,
       }),
       puppeteer: {
-        headless: true,
+        headless: "new", // Use new headless mode
         executablePath: executablePath,
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
-          "--disable-accelerated-2d-canvas",
-          "--no-first-run",
-          "--no-zygote",
           "--disable-gpu",
+          "--no-first-run",
           "--disable-web-security",
           "--disable-features=VizDisplayCompositor",
-          "--disable-background-timer-throttling",
-          "--disable-backgrounding-occluded-windows",
-          "--disable-renderer-backgrounding",
-          "--disable-extensions",
-          "--disable-plugins",
-          "--disable-default-apps",
-          "--disable-hang-monitor",
-          "--disable-prompt-on-repost",
-          "--disable-sync",
-          "--disable-translate",
-          "--disable-logging",
-          "--disable-notifications",
-          "--no-default-browser-check",
-          "--no-experiments",
-          "--memory-pressure-off",
-          "--single-process", // Important for Electron compatibility
-          "--disable-background-networking",
-          "--disable-background-media-loading",
-          "--disable-client-side-phishing-detection",
-          "--disable-default-browser-check",
-          "--disable-domain-reliability",
-          "--disable-ipc-flooding-protection",
           `--user-data-dir=${chromeProfilePath}`,
         ],
-        timeout: 0, // Disable puppeteer timeout, we handle it ourselves
-        ignoreDefaultArgs: false,
+        ignoreDefaultArgs: ["--disable-extensions"],
         ignoreHTTPSErrors: true,
+        timeout: 60000,
         handleSIGINT: false,
         handleSIGTERM: false,
         handleSIGHUP: false,
-        dumpio: false, // Set to true for debugging puppeteer
       },
     });
 
@@ -524,10 +602,10 @@ class AccountManager {
   }
 
   /**
-   * Fallback QR generation using alternative approach
+   * Fallback QR generation using ultra-minimal approach
    */
   async fallbackQRGeneration(accountId) {
-    console.log(`Attempting fallback QR generation for account: ${accountId}`);
+    console.log(`Attempting ultra-minimal fallback for account: ${accountId}`);
 
     const account = this.accounts.get(accountId);
     if (!account) {
@@ -544,60 +622,8 @@ class AccountManager {
         }
       }
 
-      // Create client with minimal puppeteer settings
-      const client = new Client({
-        authStrategy: new LocalAuth({
-          clientId: `account_${accountId}`,
-          dataPath: path.join("./data/accounts", accountId),
-        }),
-        puppeteer: {
-          headless: true,
-          args: ["--no-sandbox", "--disable-setuid-sandbox"],
-          timeout: 0,
-        },
-      });
-
-      account.client = client;
-      this.setupClientEventHandlers(client, accountId);
-
-      // Simple promise-based approach
-      return new Promise((resolve, reject) => {
-        let resolved = false;
-
-        const finish = (result) => {
-          if (!resolved) {
-            resolved = true;
-            resolve(result);
-          }
-        };
-
-        const fail = (error) => {
-          if (!resolved) {
-            resolved = true;
-            reject(error);
-          }
-        };
-
-        client.once("qr", (qr) => {
-          console.log(`Fallback QR generated for account ${accountId}`);
-          finish({ accountId, qrCode: qr, status: "qr_generated" });
-        });
-
-        client.once("ready", () => {
-          console.log(`Fallback: Account ${accountId} already authenticated`);
-          finish({ accountId, status: "already_authenticated" });
-        });
-
-        client.once("auth_failure", (msg) => {
-          fail(new Error(`Fallback auth failure: ${msg}`));
-        });
-
-        setTimeout(() => {
-          fail(new Error("Fallback method timed out after 90 seconds"));
-        }, 90000);
-
-        client.initialize().catch(fail);
-      });
+      // Try the direct Puppeteer approach as fallback
+      return await this.directPuppeteerQR(accountId);
     } catch (error) {
       console.error(`Fallback QR generation failed: ${error.message}`);
       throw error;

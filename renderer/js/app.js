@@ -1310,9 +1310,21 @@ class WhatsAppMultiApp {
 
   handleQRUpdate(data) {
     const { accountId, qrCode } = data;
+    console.log(`Received QR update for account ${accountId}`);
 
+    // Only update QR if we're currently setting up this account
     if (this.elements.qrContainer && qrCode) {
-      this.elements.qrContainer.innerHTML = `<img src="data:image/png;base64,${qrCode}" alt="QR Code" />`;
+      this.elements.qrContainer.innerHTML = `
+        <img src="data:image/png;base64,${qrCode}" alt="QR Code" style="max-width: 100%; height: auto;" />
+        <p style="margin-top: 10px; font-size: 12px; color: #666;">
+          Scan this QR code with WhatsApp on your phone
+        </p>
+      `;
+      console.log(`QR code displayed for account ${accountId}`);
+    } else {
+      console.warn(
+        `QR container not found or no QR code data for account ${accountId}`
+      );
     }
   }
 
