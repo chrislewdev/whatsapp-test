@@ -354,11 +354,26 @@ class WhatsAppMultiApp {
 
     try {
       this.showLoading("Creating account...");
+      console.log("Starting account creation for:", accountName);
 
-      const response = await window.electronAPI.account.create({
+      // Add timeout to prevent infinite loading
+      const createAccountPromise = window.electronAPI.account.create({
         accountId: accountId,
         displayName: accountName,
       });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(
+          () =>
+            reject(new Error("Account creation timed out after 30 seconds")),
+          30000
+        );
+      });
+
+      const response = await Promise.race([
+        createAccountPromise,
+        timeoutPromise,
+      ]);
 
       if (response.success) {
         console.log("Account created:", response.data);
@@ -376,18 +391,57 @@ class WhatsAppMultiApp {
         this.addAccountTab(accountData);
         this.accounts.set(accountId, accountData);
 
-        // Request QR code
-        const qrResponse = await window.electronAPI.account.getQR(accountId);
-        if (qrResponse.success) {
-          this.elements.qrContainer.innerHTML =
-            '<div class="qr-loading">Generating QR code...</div>';
-          this.showNotification("QR code requested. Please wait...", "info");
-        }
-
         this.showNotification(
-          "Account created successfully. Scan QR code with WhatsApp.",
+          "Account created successfully. Requesting QR code...",
           "info"
         );
+
+        // Request QR code with timeout
+        try {
+          this.elements.qrContainer.innerHTML =
+            '<div class="qr-loading">Generating QR code...</div>';
+
+          const qrPromise = window.electronAPI.account.getQR(accountId);
+          const qrTimeoutPromise = new Promise((_, reject) => {
+            setTimeout(
+              () => reject(new Error("QR code generation timed out")),
+              20000
+            );
+          });
+
+          const qrResponse = await Promise.race([qrPromise, qrTimeoutPromise]);
+
+          if (qrResponse.success) {
+            this.showNotification(
+              "QR code generated. Please scan with WhatsApp mobile app.",
+              "info"
+            );
+          } else {
+            console.error("QR generation failed:", qrResponse.error);
+            this.elements.qrContainer.innerHTML = `
+              <div class="qr-error">
+                <p>QR code generation failed</p>
+                <button onclick="window.WhatsAppApp.retryQRGeneration('${accountId}')">Retry</button>
+              </div>
+            `;
+            this.showNotification(
+              "QR code generation failed. Try clicking Retry.",
+              "error"
+            );
+          }
+        } catch (qrError) {
+          console.error("QR generation error:", qrError);
+          this.elements.qrContainer.innerHTML = `
+            <div class="qr-error">
+              <p>QR code generation timed out</p>
+              <button onclick="window.WhatsAppApp.retryQRGeneration('${accountId}')">Retry</button>
+            </div>
+          `;
+          this.showNotification(
+            "QR code generation timed out. Try clicking Retry.",
+            "error"
+          );
+        }
       } else {
         console.error("Failed to create account:", response.error);
         this.showNotification(
@@ -397,9 +451,53 @@ class WhatsAppMultiApp {
       }
     } catch (error) {
       console.error("Error creating account:", error);
-      this.showNotification("Error creating account", "error");
+      if (error.message.includes("timed out")) {
+        this.showNotification(
+          "Account creation timed out. Please try again.",
+          "error"
+        );
+      } else {
+        this.showNotification(
+          `Error creating account: ${error.message}`,
+          "error"
+        );
+      }
     } finally {
       this.hideLoading();
+    }
+  }
+
+  /**
+   * Retry QR code generation
+   */
+  async retryQRGeneration(accountId) {
+    try {
+      this.elements.qrContainer.innerHTML =
+        '<div class="qr-loading">Retrying QR code generation...</div>';
+
+      const response = await window.electronAPI.account.getQR(accountId);
+
+      if (response.success) {
+        this.showNotification("QR code generated successfully!", "info");
+      } else {
+        this.elements.qrContainer.innerHTML = `
+          <div class="qr-error">
+            <p>Still unable to generate QR code</p>
+            <p>Error: ${response.error}</p>
+            <button onclick="window.WhatsAppApp.retryQRGeneration('${accountId}')">Try Again</button>
+          </div>
+        `;
+        this.showNotification(
+          `QR generation failed: ${response.error}`,
+          "error"
+        );
+      }
+    } catch (error) {
+      console.error("Retry QR generation error:", error);
+      this.showNotification(
+        "Retry failed. Please check console for details.",
+        "error"
+      );
     }
   }
 

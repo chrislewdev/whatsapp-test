@@ -80,9 +80,524 @@
   font-weight: 300;
 }
 
-.close-btn:hover {
+/* QR Error Styling */
+.qr-error {
+  text-align: center;
+  padding: var(--spacing-lg);
+  color: var(--text-secondary);
+}
+
+.qr-error p {
+  margin-bottom: var(--spacing-sm);
+  font-size: var(--font-size-small);
+}
+
+.qr-error button {
+  background: var(--primary-green);
+  color: white;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-size: var(--font-size-small);
+  transition: var(--transition);
+}
+
+.qr-error button:hover {
+  background: var(--primary-green-dark);
+}
+
+/* Loading States */
+.qr-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.qr-loading::before {
+  content: "";
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-light);
+  border-top: 3px solid var(--primary-green);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Drag over states for file upload */
+.messages-container.drag-over {
+  background: rgba(0, 168, 132, 0.1);
+  border: 2px dashed var(--primary-green);
+}
+
+.messages-container.drag-over::after {
+  content: "Drop files here to send";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--primary-green);
+  color: white;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border-radius: var(--border-radius);
+  font-weight: 500;
+  z-index: 10;
+}
+
+/* File upload progress */
+.file-upload-progress {
+  background: var(--background-light);
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-md);
+  margin: var(--spacing-sm) 0;
+}
+
+.upload-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+}
+
+.file-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+}
+
+.file-size {
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+}
+
+/* Message search */
+.chat-search-bar {
+  background: var(--background-light);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: var(--spacing-sm);
+}
+
+.chat-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: none;
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+}
+
+.chat-search-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-medium);
+  padding: var(--spacing-xs);
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+.chat-search-close:hover {
   background: var(--border-light);
   color: var(--text-primary);
+}
+
+.message.search-match {
+  animation: searchHighlight 0.3s ease;
+}
+
+@keyframes searchHighlight {
+  0% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: rgba(255, 255, 0, 0.2);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.message-content mark {
+  background-color: yellow;
+  color: black;
+  border-radius: 2px;
+  padding: 1px 2px;
+}
+
+/* Reply preview */
+.reply-preview {
+  background: var(--background-light);
+  border-left: 3px solid var(--primary-green);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.reply-content {
+  flex: 1;
+}
+
+.reply-sender {
+  font-size: var(--font-size-small);
+  font-weight: 500;
+  color: var(--primary-green);
+  margin-bottom: 2px;
+}
+
+.reply-text {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.reply-cancel {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-medium);
+  padding: var(--spacing-xs);
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+.reply-cancel:hover {
+  background: var(--border-light);
+  color: var(--text-primary);
+}
+
+/* File messages */
+.file-message .message-bubble {
+  max-width: 300px;
+}
+
+.message-image {
+  border-radius: 8px;
+  max-width: 100%;
+  height: auto;
+  cursor: pointer;
+}
+
+.file-attachment {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: var(--panel-bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius);
+}
+
+.file-icon {
+  font-size: var(--font-size-large);
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-info .file-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-info .file-size {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.file-download {
+  background: var(--background-light);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.file-download:hover {
+  background: var(--border-light);
+}
+
+/* Attachment menu */
+.attachment-menu {
+  position: fixed;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-large);
+  padding: var(--spacing-sm) 0;
+  min-width: 160px;
+  z-index: 1200;
+}
+
+.attachment-option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.attachment-option:hover {
+  background: var(--background-light);
+}
+
+.attachment-icon {
+  font-size: var(--font-size-medium);
+}
+
+.attachment-label {
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+}
+
+/* Emoji picker */
+.emoji-picker {
+  position: fixed;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-large);
+  width: 300px;
+  height: 250px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+}
+
+.emoji-picker.hidden {
+  display: none;
+}
+
+.emoji-picker-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--background-light);
+}
+
+.emoji-tab {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: var(--spacing-xs);
+  font-size: 10px;
+  cursor: pointer;
+  transition: var(--transition);
+  border-bottom: 2px solid transparent;
+}
+
+.emoji-tab:hover {
+  background: var(--border-light);
+}
+
+.emoji-tab.active {
+  border-bottom-color: var(--primary-green);
+  background: var(--panel-bg);
+}
+
+.emoji-picker-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-sm);
+}
+
+.emoji-category {
+  display: none;
+}
+
+.emoji-category.active {
+  display: block;
+}
+
+.emoji-item {
+  display: inline-block;
+  font-size: var(--font-size-medium);
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: var(--transition-fast);
+}
+
+.emoji-item:hover {
+  background: var(--background-light);
+}
+
+/* Mention suggestions */
+.mention-suggestions {
+  position: fixed;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-large);
+  max-width: 200px;
+  max-height: 150px;
+  overflow-y: auto;
+  z-index: 1200;
+}
+
+.mention-suggestions.hidden {
+  display: none;
+}
+
+.mention-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+}
+
+.mention-item:hover {
+  background: var(--background-light);
+}
+
+/* Message status */
+.message-status {
+  margin-left: var(--spacing-xs);
+  font-size: 12px;
+}
+
+.message-status.sending {
+  color: var(--text-muted);
+}
+
+.message-status.sent {
+  color: var(--text-muted);
+}
+
+.message-status.delivered {
+  color: var(--primary-green);
+}
+
+/* New messages indicator */
+.new-messages-indicator {
+  position: sticky;
+  bottom: var(--spacing-md);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+}
+
+.new-messages-btn {
+  background: var(--primary-green);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+  box-shadow: var(--shadow-large);
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.new-messages-btn:hover {
+  background: var(--primary-green-dark);
+  transform: scale(1.05);
+}
+
+/* System messages */
+.message.system .message-bubble {
+  background: var(--background-light);
+  color: var(--text-muted);
+  text-align: center;
+  font-size: var(--font-size-small);
+  font-style: italic;
+}
+
+/* Typing indicator in chat header */
+.contact-status.typing {
+  color: var(--primary-green);
+  font-style: italic;
+}
+
+.contact-status.typing::after {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary-green);
+  margin-left: var(--spacing-xs);
+  animation: typingDot 1.4s infinite;
+}
+
+@keyframes typingDot {
+  0%,
+  60%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+/* ==============================================
+   RESPONSIVE IMPROVEMENTS FOR CHAT UI
+   ============================================== */
+
+@media (max-width: 768px) {
+  .emoji-picker {
+    width: 250px;
+    height: 200px;
+  }
+
+  .attachment-menu {
+    min-width: 140px;
+  }
+
+  .file-attachment {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+  }
+
+  .message-image {
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 480px) {
+  .emoji-picker {
+    width: 200px;
+    height: 180px;
+  }
+
+  .message-bubble {
+    max-width: 85%;
+  }
+
+  .file-attachment {
+    padding: var(--spacing-xs);
+  }
 }
 
 .modal-body {
