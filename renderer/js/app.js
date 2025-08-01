@@ -424,6 +424,63 @@ class WhatsAppMultiApp {
       this.updateTabStatus(data.accountId, "disconnected");
     });
 
+    // Add these with the other IPC listeners:
+    window.electronAPI.onAccountQRTimeout?.((data) => {
+      console.log("QR timeout:", data);
+      this.showNotification(data.message, "warning", 10000);
+
+      this.elements.qrContainer.innerHTML = `
+    <div class="qr-error">
+      <div style="font-size: 32px; margin-bottom: 16px;">⚠️</div>
+      <div><strong>QR Code Timeout</strong></div>
+      <div>Browser opened but QR code didn't appear</div>
+      <div style="margin-top: 10px; font-size: 12px;">
+        <strong>Troubleshooting:</strong><br>
+        1. Check the browser window - is WhatsApp Web loading?<br>
+        2. Check your internet connection<br>
+        3. Try refreshing the browser (Ctrl+R)<br>
+        4. Close browser and try again
+      </div>
+      <div style="margin-top: 10px;">
+        <button onclick="location.reload()" class="btn-retry">Restart App</button>
+      </div>
+    </div>
+  `;
+    });
+
+    window.electronAPI.onAccountCriticalTimeout?.((data) => {
+      console.log("Critical timeout:", data);
+      this.showNotification(data.message, "error", 15000);
+
+      this.elements.qrContainer.innerHTML = `
+    <div class="qr-error">
+      <div style="font-size: 32px; margin-bottom: 16px;">❌</div>
+      <div><strong>Connection Failed</strong></div>
+      <div>WhatsApp Web couldn't load in the browser</div>
+      <div style="margin-top: 10px; font-size: 12px;">
+        <strong>Common causes:</strong><br>
+        • No internet connection<br>
+        • Firewall blocking WhatsApp Web<br>
+        • Antivirus interfering with browser<br>
+        • WhatsApp servers temporarily down
+      </div>
+      <div style="margin-top: 10px;">
+        <button onclick="location.reload()" class="btn-retry">Restart App</button>
+      </div>
+    </div>
+  `;
+    });
+
+    window.electronAPI.onAccountError?.((data) => {
+      console.log("Account error:", data);
+      this.showNotification(`Account error: ${data.error}`, "error");
+    });
+
+    window.electronAPI.onAccountAuthFailed?.((data) => {
+      console.log("Account auth failed:", data);
+      this.showNotification(`Authentication failed: ${data.error}`, "error");
+    });
+
     console.log("IPC listeners set up");
   }
 
@@ -604,16 +661,15 @@ class WhatsAppMultiApp {
       this.showLoading("Creating account...");
       console.log("Starting account creation for:", accountName);
 
-      // Set up QR container for simple flow
+      // Show debug info
       this.elements.qrContainer.innerHTML = `
       <div class="qr-loading">
         <div class="loading-spinner"></div>
         <div>Creating account...</div>
-        <div class="loading-details">Setting up WhatsApp client...</div>
+        <div class="loading-details">Account ID: ${accountId}</div>
       </div>
     `;
 
-      // Create account
       const response = await window.electronAPI.account.create({
         accountId: accountId,
         displayName: accountName,
@@ -622,7 +678,6 @@ class WhatsAppMultiApp {
       if (response.success) {
         console.log("Account created:", response.data);
 
-        // Add account to UI
         const accountData = {
           accountId: accountId,
           displayName: accountName,
@@ -641,37 +696,63 @@ class WhatsAppMultiApp {
         );
         this.hideLoading();
 
-        // Update QR container for QR waiting
+        // Show what's happening
         this.elements.qrContainer.innerHTML = `
         <div class="qr-loading">
           <div class="loading-spinner"></div>
           <div>Starting WhatsApp Client...</div>
-          <div class="loading-details">A browser window will open automatically</div>
+          <div class="loading-details">Browser is launching...</div>
+          <div style="font-size: 12px; margin-top: 10px; color: #666;">
+            If browser opens but shows loading forever:<br>
+            1. Check your internet connection<br>
+            2. Try disabling VPN if active<br>
+            3. Check browser console for errors (F12)
+          </div>
         </div>
       `;
 
-        // Start QR generation - this will trigger the simple flow
         try {
+          console.log("Requesting QR code for account:", accountId);
           const qrResponse = await window.electronAPI.account.getQR(accountId);
 
           if (qrResponse.success) {
             this.showNotification(
-              "WhatsApp client started. Check the browser window for QR code.",
+              "WhatsApp client started. Browser should show QR code soon.",
               "info"
             );
+
+            // Update status
+            this.elements.qrContainer.innerHTML = `
+            <div class="qr-loading">
+              <div class="loading-spinner"></div>
+              <div>WhatsApp Client Started</div>
+              <div class="loading-details">Waiting for QR code in browser...</div>
+              <div style="font-size: 12px; margin-top: 10px; color: #666;">
+                Check the browser window - QR code should appear there.
+              </div>
+            </div>
+          `;
           } else {
             console.error("QR generation failed:", qrResponse.error);
-            this.showNotification(
-              `Failed to start WhatsApp client: ${qrResponse.error}`,
-              "error"
-            );
+            this.elements.qrContainer.innerHTML = `
+            <div class="qr-error">
+              <div>❌ Failed to start WhatsApp client</div>
+              <div style="font-size: 12px; margin-top: 10px;">
+                Error: ${qrResponse.error}
+              </div>
+            </div>
+          `;
           }
         } catch (qrError) {
           console.error("QR generation error:", qrError);
-          this.showNotification(
-            `Error starting WhatsApp client: ${qrError.message}`,
-            "error"
-          );
+          this.elements.qrContainer.innerHTML = `
+          <div class="qr-error">
+            <div>❌ Error starting WhatsApp client</div>
+            <div style="font-size: 12px; margin-top: 10px;">
+              ${qrError.message}
+            </div>
+          </div>
+        `;
         }
       } else {
         console.error("Failed to create account:", response.error);
@@ -690,6 +771,7 @@ class WhatsAppMultiApp {
       this.hideLoading();
     }
   }
+
   /**
    * Retry QR code generation
    */

@@ -107,22 +107,22 @@ class AccountManager {
   setupClientEventHandlers(client, accountId) {
     console.log(`Setting up event handlers for account: ${accountId}`);
 
-    // QR Code generation - library handles detection automatically
+    // QR Code generation
     client.on("qr", (qr) => {
-      console.log(`QR Code generated for account ${accountId}`);
+      console.log(`✅ QR Code generated for account ${accountId}`);
+      console.log(`QR Code length: ${qr.length}`);
 
-      // Send QR to renderer immediately
       if (global.mainWindow) {
         global.mainWindow.webContents.send("qr:update", {
           accountId: accountId,
-          qrCode: qr, // whatsapp-web.js gives us the QR code directly
+          qrCode: qr,
         });
       }
     });
 
-    // Loading/syncing progress
+    // Loading progress
     client.on("loading_screen", (percent, message) => {
-      console.log(`Account ${accountId} loading: ${percent}% - ${message}`);
+      console.log(`📱 Account ${accountId} loading: ${percent}% - ${message}`);
 
       if (global.mainWindow) {
         global.mainWindow.webContents.send("account:loading", {
@@ -133,28 +133,23 @@ class AccountManager {
       }
     });
 
-    // Authentication success
-    client.on("authenticated", () => {
-      console.log(`Account ${accountId} authenticated successfully`);
+    // State changes
+    client.on("change_state", (state) => {
+      console.log(`🔄 Account ${accountId} state changed to: ${state}`);
+    });
 
+    // Authentication events
+    client.on("authenticated", () => {
+      console.log(`✅ Account ${accountId} authenticated successfully`);
       const account = this.accounts.get(accountId);
       if (account) {
         account.isAuthenticated = true;
         account.uiState.onlineStatus = "authenticated";
       }
-
-      if (global.mainWindow) {
-        global.mainWindow.webContents.send("account:authenticated", {
-          accountId: accountId,
-          status: "authenticated",
-        });
-      }
     });
 
-    // Client ready - fully synced and operational
     client.on("ready", () => {
-      console.log(`Account ${accountId} is ready and fully synced`);
-
+      console.log(`✅ Account ${accountId} is ready and fully synced`);
       const account = this.accounts.get(accountId);
       if (account) {
         account.isActive = true;
@@ -162,7 +157,6 @@ class AccountManager {
         account.uiState.onlineStatus = "online";
       }
 
-      // Notify renderer
       if (global.mainWindow) {
         global.mainWindow.webContents.send("account:ready", {
           accountId: accountId,
@@ -171,60 +165,22 @@ class AccountManager {
       }
     });
 
-    // Message handling with account tagging
-    client.on("message", async (message) => {
-      // Tag message with accountId to prevent mixing
-      message.accountId = accountId;
-
-      console.log(`Message received for account ${accountId}: ${message.from}`);
-
-      // Update account's message cache
-      const account = this.accounts.get(accountId);
-      if (account) {
-        const chatId = message.from;
-        if (!account.uiState.messageCache.has(chatId)) {
-          account.uiState.messageCache.set(chatId, []);
-        }
-        account.uiState.messageCache.get(chatId).push({
-          id: message.id._serialized,
-          from: message.from,
-          body: message.body,
-          timestamp: message.timestamp,
-          accountId: accountId,
-        });
-
-        account.uiState.unreadCount++;
-      }
-
-      // Send to renderer
-      if (global.mainWindow) {
-        global.mainWindow.webContents.send("message:received", {
-          accountId: accountId,
-          message: {
-            id: message.id._serialized,
-            from: message.from,
-            body: message.body,
-            timestamp: message.timestamp,
-          },
-        });
-      }
-    });
-
-    // Authentication failure
+    // Error handling
     client.on("auth_failure", (message) => {
       console.error(
-        `Authentication failed for account ${accountId}: ${message}`
+        `❌ Authentication failed for account ${accountId}: ${message}`
       );
-      this.errorHandler.handleAccountError(
-        accountId,
-        new Error(`Authentication failed: ${message}`),
-        "auth_failure"
-      );
+
+      if (global.mainWindow) {
+        global.mainWindow.webContents.send("account:auth-failed", {
+          accountId: accountId,
+          error: message,
+        });
+      }
     });
 
-    // Client disconnection
     client.on("disconnected", (reason) => {
-      console.log(`Account ${accountId} disconnected: ${reason}`);
+      console.log(`❌ Account ${accountId} disconnected: ${reason}`);
 
       const account = this.accounts.get(accountId);
       if (account) {
@@ -238,19 +194,59 @@ class AccountManager {
           reason: reason,
         });
       }
-
-      // Auto-reconnect after delay
-      setTimeout(() => {
-        console.log(`Attempting to reconnect account ${accountId}`);
-        client.initialize();
-      }, 10000); // 10 second delay
     });
 
-    // General error handling
     client.on("error", (error) => {
-      console.error(`Error in account ${accountId}:`, error);
-      this.errorHandler.handleAccountError(accountId, error, "client_error");
+      console.error(`❌ Error in account ${accountId}:`, error);
+
+      if (global.mainWindow) {
+        global.mainWindow.webContents.send("account:error", {
+          accountId: accountId,
+          error: error.message,
+        });
+      }
     });
+
+    // Add timeout with more detailed debugging
+    setTimeout(() => {
+      if (!client.info) {
+        console.warn(
+          `⚠️ TIMEOUT: No QR code received for account ${accountId} after 30 seconds`
+        );
+        console.warn(
+          `This usually means WhatsApp Web failed to load in the browser`
+        );
+
+        // Notify frontend about the timeout
+        if (global.mainWindow) {
+          global.mainWindow.webContents.send("account:qr-timeout", {
+            accountId: accountId,
+            message:
+              "Browser opened but QR code didn't appear. Check browser window for errors.",
+          });
+        }
+      }
+    }, 30000);
+
+    // Extended timeout for complete failure
+    setTimeout(() => {
+      if (!client.info) {
+        console.error(
+          `❌ CRITICAL: No response from WhatsApp Web after 60 seconds for account ${accountId}`
+        );
+        console.error(
+          `Browser may have failed to load WhatsApp Web completely`
+        );
+
+        if (global.mainWindow) {
+          global.mainWindow.webContents.send("account:critical-timeout", {
+            accountId: accountId,
+            message:
+              "WhatsApp Web failed to load. Try restarting the app or check your internet connection.",
+          });
+        }
+      }
+    }, 60000);
   }
 
   /**
@@ -326,34 +322,50 @@ class AccountManager {
 
     console.log(`Creating simple isolated client for account ${accountId}`);
 
-    // Let whatsapp-web.js handle everything with increased timeouts
+    const findChromeExecutable = () => {
+      const possiblePaths = [
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+        process.env.CHROME_BIN,
+        process.env.GOOGLE_CHROME_BIN,
+      ].filter(Boolean);
+
+      for (const chromePath of possiblePaths) {
+        if (fs.existsSync(chromePath)) {
+          console.log(`Found Chrome at: ${chromePath}`);
+          return chromePath;
+        }
+      }
+      return undefined;
+    };
+
+    // Much simpler, more reliable browser configuration
     const client = new Client({
       authStrategy: new LocalAuth({
         clientId: `account_${accountId}`,
         dataPath: accountDataPath,
       }),
       puppeteer: {
-        headless: false, // Show browser for user interaction and debugging
+        headless: false,
+        executablePath: findChromeExecutable(),
         args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-blink-features=AutomationControlled",
-          "--exclude-switches=enable-automation",
-          `--user-data-dir=${chromeProfilePath}`,
+          "--no-sandbox", // Required for many systems
+          "--disable-setuid-sandbox", // Security requirement
+          "--disable-dev-shm-usage", // Overcome limited shared memory
+          "--no-first-run", // Skip first run setup
+          "--no-default-browser-check", // Don't check for default browser
+          "--disable-web-security", // Allow WhatsApp Web to load
+          "--disable-features=VizDisplayCompositor", // Fix rendering issues
+          `--user-data-dir=${chromeProfilePath}`, // Isolated profile
         ],
-        ignoreDefaultArgs: ["--enable-automation"],
-        timeout: 120000, // 2 minutes browser launch timeout
-        protocolTimeout: 600000, // 10 minutes protocol timeout for syncing
-      },
-      // Add WhatsApp-specific settings for better reliability
-      webVersionCache: {
-        type: "remote",
-        remotePath:
-          "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html",
+        // Remove problematic arguments that might block WhatsApp Web
+        ignoreDefaultArgs: false, // Use default args
+        timeout: 60000,
+        protocolTimeout: 180000, // 3 minutes
       },
     });
 
+    console.log(`✅ Client created for account ${accountId}`);
     return client;
   }
 

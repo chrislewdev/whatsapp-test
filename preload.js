@@ -105,6 +105,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("account:disconnected", (event, data) => callback(data));
   },
 
+  onAccountQRTimeout: (callback) => {
+    ipcRenderer.on("account:qr-timeout", (event, data) => callback(data));
+  },
+
+  onAccountCriticalTimeout: (callback) => {
+    ipcRenderer.on("account:critical-timeout", (event, data) => callback(data));
+  },
+
+  onAccountError: (callback) => {
+    ipcRenderer.on("account:error", (event, data) => callback(data));
+  },
+
+  onAccountAuthFailed: (callback) => {
+    ipcRenderer.on("account:auth-failed", (event, data) => callback(data));
+  },
+
   // Remove event listeners
   removeAllListeners: (channel) => {
     ipcRenderer.removeAllListeners(channel);
