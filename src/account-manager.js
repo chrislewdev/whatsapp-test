@@ -274,30 +274,26 @@ class AccountManager {
         }
       }
 
-      // Create client and let whatsapp-web.js handle everything
+      // Create client with webVersionCache fix
       const client = await this.createSimpleIsolatedClient(accountId);
       account.client = client;
 
       // Set up event handlers
       this.setupClientEventHandlers(client, accountId);
 
-      // Initialize client - this will handle browser launch, QR detection, etc.
+      // Initialize client
       console.log(
         `Initializing whatsapp-web.js client for account: ${accountId}`
       );
       client.initialize();
 
-      // Return immediately - QR code will come via event handler
       return {
         accountId,
         status: "initializing",
         message: "WhatsApp client is starting up...",
       };
     } catch (error) {
-      console.error(
-        `Simple QR generation failed for account ${accountId}:`,
-        error
-      );
+      console.error(`QR generation failed for account ${accountId}:`, error);
       throw error;
     }
   }
@@ -307,65 +303,28 @@ class AccountManager {
    */
   async createSimpleIsolatedClient(accountId) {
     const accountDataPath = path.join("./data/accounts", accountId);
-    const chromeProfilePath = path.join(
-      "./data/chrome_profiles",
-      `chrome_${accountId}`
-    );
 
-    // Ensure directories exist
     if (!fs.existsSync(accountDataPath)) {
       fs.mkdirSync(accountDataPath, { recursive: true });
     }
-    if (!fs.existsSync(chromeProfilePath)) {
-      fs.mkdirSync(chromeProfilePath, { recursive: true });
-    }
 
-    console.log(`Creating simple isolated client for account ${accountId}`);
+    console.log(
+      `Creating client with no webVersionCache (library defaults) for account ${accountId}`
+    );
 
-    const findChromeExecutable = () => {
-      const possiblePaths = [
-        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-        process.env.CHROME_BIN,
-        process.env.GOOGLE_CHROME_BIN,
-      ].filter(Boolean);
-
-      for (const chromePath of possiblePaths) {
-        if (fs.existsSync(chromePath)) {
-          console.log(`Found Chrome at: ${chromePath}`);
-          return chromePath;
-        }
-      }
-      return undefined;
-    };
-
-    // Much simpler, more reliable browser configuration
     const client = new Client({
       authStrategy: new LocalAuth({
         clientId: `account_${accountId}`,
         dataPath: accountDataPath,
       }),
+      // Completely remove webVersionCache - let library handle it
       puppeteer: {
         headless: false,
-        executablePath: findChromeExecutable(),
-        args: [
-          "--no-sandbox", // Required for many systems
-          "--disable-setuid-sandbox", // Security requirement
-          "--disable-dev-shm-usage", // Overcome limited shared memory
-          "--no-first-run", // Skip first run setup
-          "--no-default-browser-check", // Don't check for default browser
-          "--disable-web-security", // Allow WhatsApp Web to load
-          "--disable-features=VizDisplayCompositor", // Fix rendering issues
-          `--user-data-dir=${chromeProfilePath}`, // Isolated profile
-        ],
-        // Remove problematic arguments that might block WhatsApp Web
-        ignoreDefaultArgs: false, // Use default args
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
         timeout: 60000,
-        protocolTimeout: 180000, // 3 minutes
       },
     });
 
-    console.log(`✅ Client created for account ${accountId}`);
     return client;
   }
 
