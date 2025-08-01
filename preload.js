@@ -55,6 +55,56 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("error:notification", (event, data) => callback(data));
   },
 
+  onManualQRInstructions: (callback) => {
+    ipcRenderer.on("show:manual-qr-instructions", (event, data) =>
+      callback(data)
+    );
+  },
+
+  onQRBrowserInstructions: (callback) => {
+    ipcRenderer.on("qr:browser-instructions", (event, data) => callback(data));
+  },
+
+  onAccountAuthenticated: (callback) => {
+    ipcRenderer.on("account:authenticated", (event, data) => callback(data));
+  },
+
+  onQRScanned: (callback) => {
+    ipcRenderer.on("qr:scanned", (event, data) => callback(data));
+  },
+
+  onAccountReady: (callback) => {
+    ipcRenderer.on("account:ready", (event, data) => callback(data));
+  },
+
+  onQRInitializing: (callback) => {
+    ipcRenderer.on("qr:initializing", (event, data) => callback(data));
+  },
+
+  onAccountConnecting: (callback) => {
+    ipcRenderer.on("account:connecting", (event, data) => callback(data));
+  },
+
+  onAccountTimeout: (callback) => {
+    ipcRenderer.on("account:timeout", (event, data) => callback(data));
+  },
+
+  onAccountBrowserOnly: (callback) => {
+    ipcRenderer.on("account:browser-only", (event, data) => callback(data));
+  },
+
+  onAccountClientFailed: (callback) => {
+    ipcRenderer.on("account:client-failed", (event, data) => callback(data));
+  },
+
+  onAccountLoading: (callback) => {
+    ipcRenderer.on("account:loading", (event, data) => callback(data));
+  },
+
+  onAccountDisconnected: (callback) => {
+    ipcRenderer.on("account:disconnected", (event, data) => callback(data));
+  },
+
   // Remove event listeners
   removeAllListeners: (channel) => {
     ipcRenderer.removeAllListeners(channel);

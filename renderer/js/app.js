@@ -210,6 +210,220 @@ class WhatsAppMultiApp {
       this.showNotification(data.message, data.type);
     });
 
+    window.electronAPI.onManualQRInstructions?.((data) => {
+      console.log("Manual QR instructions received:", data);
+      this.showNotification(data.message, "info", 300000); // Show for 5 minutes
+
+      // Update QR container with instructions
+      this.elements.qrContainer.innerHTML = `
+    <div class="qr-manual">
+      <div class="manual-icon">🌐</div>
+      <div class="manual-instructions">
+        <h4>Manual Authentication</h4>
+        <p>A browser window has opened with WhatsApp Web.</p>
+        <p><strong>Please:</strong></p>
+        <ol>
+          <li>Wait for the QR code to appear in the browser</li>
+          <li>Open WhatsApp on your phone</li>
+          <li>Tap Menu (⋮) > Linked Devices</li>
+          <li>Tap "Link a Device"</li>
+          <li>Scan the QR code in the browser window</li>
+        </ol>
+        <p>The browser will close automatically when done.</p>
+      </div>
+    </div>
+  `;
+    });
+
+    window.electronAPI.onQRBrowserInstructions?.((data) => {
+      console.log("QR browser instructions received:", data);
+      this.showNotification(data.message, "info", 60000); // Show for 1 minute
+
+      // Update QR container to show it's interactive
+      const qrImg = this.elements.qrContainer.querySelector("img");
+      if (qrImg) {
+        this.elements.qrContainer.innerHTML = `
+      ${qrImg.outerHTML}
+      <div style="margin-top: 10px; padding: 10px; background: #e8f5e8; border-radius: 8px; text-align: center;">
+        <p style="margin: 0; font-size: 12px; color: #2d7738;">
+          <strong>✅ QR Code Ready!</strong><br>
+          Keep the browser window open and scan this QR code with your phone.
+        </p>
+      </div>
+    `;
+      }
+    });
+
+    window.electronAPI.onAccountAuthenticated?.((data) => {
+      console.log("Account authenticated:", data);
+      this.showNotification(
+        `Account ${data.accountId} authenticated successfully!`,
+        "success"
+      );
+
+      // Update the account status
+      const account = this.accounts.get(data.accountId);
+      if (account) {
+        account.isAuthenticated = true;
+        account.isActive = true;
+      }
+
+      // Update UI to show success
+      this.elements.qrContainer.innerHTML = `
+    <div class="qr-success">
+      <div style="font-size: 48px; margin-bottom: 16px;">✅</div>
+      <div><strong>Account Connected Successfully!</strong></div>
+      <div>You can now use WhatsApp from this account.</div>
+    </div>
+  `;
+
+      // Auto-close setup after a delay
+      setTimeout(() => {
+        this.hideAccountSetup();
+        this.showChatInterface();
+        this.switchToAccount(data.accountId);
+      }, 3000);
+    });
+
+    window.electronAPI.onQRScanned?.((data) => {
+      console.log("QR scanned:", data);
+      this.showNotification(data.message, "info", 30000);
+
+      // Update QR container to show syncing
+      this.elements.qrContainer.innerHTML = `
+    <div class="qr-syncing">
+      <div style="font-size: 32px; margin-bottom: 16px;">📱</div>
+      <div class="loading-spinner"></div>
+      <div><strong>QR Code Scanned!</strong></div>
+      <div>Syncing your messages...</div>
+      <div style="margin-top: 8px; font-size: 12px; color: #666;">
+        This may take a few minutes for accounts with many messages.
+      </div>
+    </div>
+  `;
+    });
+
+    window.electronAPI.onAccountReady?.((data) => {
+      console.log("Account ready:", data);
+      this.showNotification(
+        `Account ${data.accountId} is ready to use!`,
+        "success"
+      );
+
+      // Update account status
+      const account = this.accounts.get(data.accountId);
+      if (account) {
+        account.isAuthenticated = true;
+        account.isActive = true;
+        account.onlineStatus = "online";
+      }
+
+      // Update tab status
+      this.updateTabStatus(data.accountId, "connected");
+
+      // Show success and auto-switch
+      this.elements.qrContainer.innerHTML = `
+    <div class="qr-success">
+      <div style="font-size: 48px; margin-bottom: 16px;">✅</div>
+      <div><strong>Account Ready!</strong></div>
+      <div>Your WhatsApp account is now connected and synced.</div>
+    </div>
+  `;
+
+      // Auto-switch to the account after a delay
+      setTimeout(() => {
+        this.hideAccountSetup();
+        this.showChatInterface();
+        this.switchToAccount(data.accountId);
+      }, 3000);
+    });
+
+    window.electronAPI.onQRInitializing?.((data) => {
+      console.log("QR initializing:", data);
+      this.showNotification(data.message, "info");
+
+      this.elements.qrContainer.innerHTML = `
+    <div class="qr-initializing">
+      <div style="font-size: 32px; margin-bottom: 16px;">⚙️</div>
+      <div class="loading-spinner"></div>
+      <div><strong>Setting Up Account...</strong></div>
+      <div>Creating secure connection to WhatsApp...</div>
+    </div>
+  `;
+    });
+
+    window.electronAPI.onAccountConnecting?.((data) => {
+      console.log("Account connecting:", data);
+      this.updateTabStatus(data.accountId, "connecting");
+    });
+
+    window.electronAPI.onAccountTimeout?.((data) => {
+      console.log("Account timeout:", data);
+      this.showNotification(data.message, "warning");
+      this.updateTabStatus(data.accountId, "browser-only");
+
+      // Show success with limitation
+      this.elements.qrContainer.innerHTML = `
+    <div class="qr-success">
+      <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+      <div><strong>Partially Connected</strong></div>
+      <div>WhatsApp Web browser works, but app integration is limited.</div>
+      <div style="margin-top: 8px; font-size: 12px;">You can still use the browser window for WhatsApp.</div>
+    </div>
+  `;
+
+      setTimeout(() => {
+        this.hideAccountSetup();
+        this.showChatInterface();
+      }, 5000);
+    });
+
+    window.electronAPI.onAccountBrowserOnly?.((data) => {
+      console.log("Account browser only:", data);
+      this.showNotification(data.message, "warning");
+      this.updateTabStatus(data.accountId, "browser-only");
+    });
+
+    window.electronAPI.onAccountClientFailed?.((data) => {
+      console.log("Account client failed:", data);
+      this.showNotification(data.message, "warning");
+      this.updateTabStatus(data.accountId, "browser-only");
+    });
+
+    window.electronAPI.onAccountLoading?.((data) => {
+      console.log("Account loading:", data);
+
+      // Update QR container to show loading progress
+      this.elements.qrContainer.innerHTML = `
+    <div class="qr-loading">
+      <div class="loading-spinner"></div>
+      <div><strong>Loading WhatsApp...</strong></div>
+      <div>${data.message}</div>
+      <div class="progress-bar" style="margin-top: 10px;">
+        <div class="progress-fill" style="width: ${data.percent}%"></div>
+      </div>
+      <div style="font-size: 12px; margin-top: 5px;">${data.percent}%</div>
+    </div>
+  `;
+    });
+
+    window.electronAPI.onAccountDisconnected?.((data) => {
+      console.log("Account disconnected:", data);
+      this.showNotification(
+        `Account ${data.accountId} disconnected: ${data.reason}`,
+        "warning"
+      );
+
+      // Update tab status
+      const account = this.accounts.get(data.accountId);
+      if (account) {
+        account.isActive = false;
+        account.onlineStatus = "disconnected";
+      }
+
+      this.updateTabStatus(data.accountId, "disconnected");
+    });
+
     console.log("IPC listeners set up");
   }
 
@@ -289,6 +503,40 @@ class WhatsAppMultiApp {
   }
 
   /**
+   * Update tab status with visual indicators
+   */
+  updateTabStatus(accountId, status) {
+    const tab = this.elements.accountTabs?.querySelector(
+      `[data-account-id="${accountId}"]`
+    );
+    if (!tab) return;
+
+    // Remove all status classes
+    tab.classList.remove("connecting", "connected", "syncing", "ready");
+
+    // Add new status
+    tab.classList.add(status);
+
+    // Update visual indicator
+    let indicator = tab.querySelector(".status-indicator");
+    if (!indicator) {
+      indicator = document.createElement("span");
+      indicator.className = "status-indicator";
+      tab.appendChild(indicator);
+    }
+
+    const statusMap = {
+      connecting: "🔄",
+      syncing: "📱",
+      connected: "✅",
+      ready: "🟢",
+    };
+
+    indicator.textContent = statusMap[status] || "❓";
+    indicator.title = status.charAt(0).toUpperCase() + status.slice(1);
+  }
+
+  /**
    * Screen management
    */
   hideAllScreens() {
@@ -356,32 +604,20 @@ class WhatsAppMultiApp {
       this.showLoading("Creating account...");
       console.log("Starting account creation for:", accountName);
 
-      // Set up QR container to show loading state
+      // Set up QR container for simple flow
       this.elements.qrContainer.innerHTML = `
       <div class="qr-loading">
         <div class="loading-spinner"></div>
         <div>Creating account...</div>
-        <div class="loading-details">Setting up isolated client...</div>
+        <div class="loading-details">Setting up WhatsApp client...</div>
       </div>
     `;
 
-      const createAccountPromise = window.electronAPI.account.create({
+      // Create account
+      const response = await window.electronAPI.account.create({
         accountId: accountId,
         displayName: accountName,
       });
-
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(
-          () =>
-            reject(new Error("Account creation timed out after 30 seconds")),
-          30000
-        );
-      });
-
-      const response = await Promise.race([
-        createAccountPromise,
-        timeoutPromise,
-      ]);
 
       if (response.success) {
         console.log("Account created:", response.data);
@@ -393,86 +629,48 @@ class WhatsAppMultiApp {
           isActive: false,
           isAuthenticated: false,
           unreadCount: 0,
-          onlineStatus: "connecting",
+          onlineStatus: "initializing",
         };
 
         this.addAccountTab(accountData);
         this.accounts.set(accountId, accountData);
 
         this.showNotification(
-          "Account created successfully. Generating QR code...",
+          "Account created. Starting WhatsApp client...",
           "info"
         );
+        this.hideLoading();
 
-        // Update QR container to show QR generation state
+        // Update QR container for QR waiting
         this.elements.qrContainer.innerHTML = `
         <div class="qr-loading">
           <div class="loading-spinner"></div>
-          <div>Generating QR Code...</div>
-          <div class="loading-details">This may take 30-60 seconds</div>
+          <div>Starting WhatsApp Client...</div>
+          <div class="loading-details">A browser window will open automatically</div>
         </div>
       `;
 
-        // Hide main loading overlay but keep QR loading
-        this.hideLoading();
-
+        // Start QR generation - this will trigger the simple flow
         try {
-          console.log("Requesting QR code for account:", accountId);
           const qrResponse = await window.electronAPI.account.getQR(accountId);
 
           if (qrResponse.success) {
-            if (qrResponse.data.status === "already_authenticated") {
-              this.elements.qrContainer.innerHTML = `
-              <div class="qr-success">
-                <div>✅ Account already authenticated!</div>
-                <div>This account is ready to use.</div>
-              </div>
-            `;
-              this.showNotification(
-                "Account is already authenticated and ready!",
-                "info"
-              );
-            } else {
-              // The QR code should be sent via IPC and handled by handleQRUpdate
-              // If not received within 5 seconds, show error
-              setTimeout(() => {
-                const currentContent = this.elements.qrContainer.innerHTML;
-                if (currentContent.includes("Generating QR Code")) {
-                  console.warn(
-                    "QR code not received via IPC, checking response data"
-                  );
-                  if (qrResponse.data.qrCode) {
-                    // Fallback: display QR directly from response
-                    this.elements.qrContainer.innerHTML = `
-                    <img src="data:image/png;base64,${qrResponse.data.qrCode}" alt="QR Code" style="max-width: 100%; height: auto; border-radius: 8px;" />
-                    <p style="margin-top: 10px; font-size: 12px; color: #666; text-align: center;">
-                      Scan this QR code with WhatsApp on your phone
-                    </p>
-                  `;
-                    console.log("QR code displayed via fallback method");
-                  } else {
-                    this.handleQRGenerationFailure(
-                      accountId,
-                      "QR code generated but not received properly"
-                    );
-                  }
-                }
-              }, 5000);
-
-              this.showNotification(
-                "QR code generated. Please scan with WhatsApp mobile app.",
-                "info"
-              );
-            }
+            this.showNotification(
+              "WhatsApp client started. Check the browser window for QR code.",
+              "info"
+            );
           } else {
             console.error("QR generation failed:", qrResponse.error);
-            this.handleQRGenerationFailure(accountId, qrResponse.error);
+            this.showNotification(
+              `Failed to start WhatsApp client: ${qrResponse.error}`,
+              "error"
+            );
           }
         } catch (qrError) {
           console.error("QR generation error:", qrError);
-          this.handleQRGenerationFailure(
-            accountId,
-            qrError.message || "Unknown error occurred"
+          this.showNotification(
+            `Error starting WhatsApp client: ${qrError.message}`,
+            "error"
           );
         }
       } else {
@@ -484,25 +682,14 @@ class WhatsAppMultiApp {
       }
     } catch (error) {
       console.error("Error creating account:", error);
-      if (error.message.includes("timed out")) {
-        this.showNotification(
-          "Account creation timed out. Please try again.",
-          "error"
-        );
-      } else {
-        this.showNotification(
-          `Error creating account: ${error.message}`,
-          "error"
-        );
-      }
+      this.showNotification(
+        `Error creating account: ${error.message}`,
+        "error"
+      );
     } finally {
-      // Only hide loading if we're not waiting for QR
-      if (!this.elements.qrContainer.innerHTML.includes("Generating QR Code")) {
-        this.hideLoading();
-      }
+      this.hideLoading();
     }
   }
-
   /**
    * Retry QR code generation
    */
@@ -612,6 +799,51 @@ class WhatsAppMultiApp {
     `;
 
     this.showNotification(`QR generation failed: ${errorExplanation}`, "error");
+  }
+
+  /**
+   * Handle WhatsApp linking errors with user-friendly guidance
+   */
+  handleWhatsAppLinkingError(accountId) {
+    this.elements.qrContainer.innerHTML = `
+    <div class="qr-error">
+      <div class="error-icon">📱</div>
+      <div class="error-main">
+        <h4>Can't Link Device</h4>
+        <p>WhatsApp says "Can't link new devices at this time"</p>
+      </div>
+      <div class="troubleshooting-tips">
+        <p><strong>This usually happens because:</strong></p>
+        <ul>
+          <li>Your WhatsApp account is less than 14 days old</li>
+          <li>The account hasn't been used recently</li>
+          <li>Temporary restrictions in your region</li>
+          <li>Your WhatsApp app needs updating</li>
+        </ul>
+        <p><strong>Try these solutions:</strong></p>
+        <ul>
+          <li>Update WhatsApp on your phone to the latest version</li>
+          <li>Use the account normally for a few days, then try again</li>
+          <li>Try from a different internet connection</li>
+          <li>Wait 24-48 hours and try again</li>
+          <li>Use a different, more established WhatsApp account</li>
+        </ul>
+      </div>
+      <div class="error-actions">
+        <button onclick="window.WhatsAppApp.retryQRGeneration('${accountId}')" class="btn-retry">
+          🔄 Generate New QR
+        </button>
+        <button onclick="window.WhatsAppApp.cancelAccountSetup('${accountId}')" class="btn-cancel">
+          ❌ Cancel Setup
+        </button>
+      </div>
+    </div>
+  `;
+
+    this.showNotification(
+      "WhatsApp account linking restricted. Try the suggested solutions.",
+      "warning"
+    );
   }
 
   /**

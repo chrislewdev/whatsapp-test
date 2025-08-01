@@ -280,6 +280,12 @@ class WhatsAppMultiApp {
       }
     });
 
+    global.sendManualQRInstructions = (data) => {
+      if (this.mainWindow) {
+        this.mainWindow.webContents.send("show:manual-qr-instructions", data);
+      }
+    };
+
     console.log("IPC handlers registered");
   }
 

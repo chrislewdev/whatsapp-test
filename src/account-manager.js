@@ -105,15 +105,30 @@ class AccountManager {
    * CRITICAL: All events are tagged with accountId to prevent message mixing
    */
   setupClientEventHandlers(client, accountId) {
-    // QR Code generation
+    console.log(`Setting up event handlers for account: ${accountId}`);
+
+    // QR Code generation - library handles detection automatically
     client.on("qr", (qr) => {
       console.log(`QR Code generated for account ${accountId}`);
 
-      // Send QR to renderer with account tagging
+      // Send QR to renderer immediately
       if (global.mainWindow) {
         global.mainWindow.webContents.send("qr:update", {
           accountId: accountId,
-          qrCode: qr,
+          qrCode: qr, // whatsapp-web.js gives us the QR code directly
+        });
+      }
+    });
+
+    // Loading/syncing progress
+    client.on("loading_screen", (percent, message) => {
+      console.log(`Account ${accountId} loading: ${percent}% - ${message}`);
+
+      if (global.mainWindow) {
+        global.mainWindow.webContents.send("account:loading", {
+          accountId: accountId,
+          percent: percent,
+          message: message,
         });
       }
     });
@@ -127,30 +142,38 @@ class AccountManager {
         account.isAuthenticated = true;
         account.uiState.onlineStatus = "authenticated";
       }
+
+      if (global.mainWindow) {
+        global.mainWindow.webContents.send("account:authenticated", {
+          accountId: accountId,
+          status: "authenticated",
+        });
+      }
     });
 
-    // Client ready
+    // Client ready - fully synced and operational
     client.on("ready", () => {
-      console.log(`Account ${accountId} is ready`);
+      console.log(`Account ${accountId} is ready and fully synced`);
 
       const account = this.accounts.get(accountId);
       if (account) {
         account.isActive = true;
+        account.isAuthenticated = true;
         account.uiState.onlineStatus = "online";
       }
 
       // Notify renderer
       if (global.mainWindow) {
-        global.mainWindow.webContents.send("account:update", {
+        global.mainWindow.webContents.send("account:ready", {
           accountId: accountId,
           status: "ready",
         });
       }
     });
 
-    // CRITICAL: Message handling with account tagging
+    // Message handling with account tagging
     client.on("message", async (message) => {
-      // CRITICAL: Tag message with accountId to prevent mixing
+      // Tag message with accountId to prevent mixing
       message.accountId = accountId;
 
       console.log(`Message received for account ${accountId}: ${message.from}`);
@@ -167,17 +190,16 @@ class AccountManager {
           from: message.from,
           body: message.body,
           timestamp: message.timestamp,
-          accountId: accountId, // CRITICAL: Always tag with account
+          accountId: accountId,
         });
 
-        // Update unread count
         account.uiState.unreadCount++;
       }
 
-      // Send to renderer with account tagging
+      // Send to renderer
       if (global.mainWindow) {
         global.mainWindow.webContents.send("message:received", {
-          accountId: accountId, // CRITICAL: Account identification
+          accountId: accountId,
           message: {
             id: message.id._serialized,
             from: message.from,
@@ -186,6 +208,18 @@ class AccountManager {
           },
         });
       }
+    });
+
+    // Authentication failure
+    client.on("auth_failure", (message) => {
+      console.error(
+        `Authentication failed for account ${accountId}: ${message}`
+      );
+      this.errorHandler.handleAccountError(
+        accountId,
+        new Error(`Authentication failed: ${message}`),
+        "auth_failure"
+      );
     });
 
     // Client disconnection
@@ -198,14 +232,21 @@ class AccountManager {
         account.uiState.onlineStatus = "disconnected";
       }
 
-      // Attempt to reconnect after delay
+      if (global.mainWindow) {
+        global.mainWindow.webContents.send("account:disconnected", {
+          accountId: accountId,
+          reason: reason,
+        });
+      }
+
+      // Auto-reconnect after delay
       setTimeout(() => {
         console.log(`Attempting to reconnect account ${accountId}`);
         client.initialize();
-      }, 5000);
+      }, 10000); // 10 second delay
     });
 
-    // Error handling with account context
+    // General error handling
     client.on("error", (error) => {
       console.error(`Error in account ${accountId}:`, error);
       this.errorHandler.handleAccountError(accountId, error, "client_error");
@@ -225,16 +266,10 @@ class AccountManager {
       throw new Error(`Account ${accountId} is already authenticated`);
     }
 
-    console.log(`Starting QR generation for account: ${accountId}`);
+    console.log(`Starting simple QR generation for account: ${accountId}`);
 
-    let simpleError, directError, minimalError; // Declare variables at function scope
-
-    // Strategy 1: Try simplified whatsapp-web.js approach
     try {
-      console.log(
-        `Trying simplified whatsapp-web.js approach for account: ${accountId}`
-      );
-
+      // Clean up any existing client
       if (account.client) {
         try {
           await account.client.destroy();
@@ -243,304 +278,38 @@ class AccountManager {
         }
       }
 
-      const newClient = await this.createIsolatedClient(accountId);
-      account.client = newClient;
-      this.setupClientEventHandlers(newClient, accountId);
+      // Create client and let whatsapp-web.js handle everything
+      const client = await this.createSimpleIsolatedClient(accountId);
+      account.client = client;
 
-      const result = await this.waitForQR(newClient, accountId, 1);
-      console.log(`Simplified approach successful for account: ${accountId}`);
-      return result;
-    } catch (error) {
-      simpleError = error; // Now properly scoped
+      // Set up event handlers
+      this.setupClientEventHandlers(client, accountId);
+
+      // Initialize client - this will handle browser launch, QR detection, etc.
       console.log(
-        `Simplified approach failed for account ${accountId}: ${error.message}`
+        `Initializing whatsapp-web.js client for account: ${accountId}`
       );
+      client.initialize();
 
-      // Clean up failed client
-      try {
-        if (account.client) {
-          await account.client.destroy();
-        }
-      } catch (e) {
-        console.warn(`Cleanup warning: ${e.message}`);
-      }
-    }
-
-    // Strategy 2: Try direct Puppeteer approach
-    try {
-      console.log(`Trying direct Puppeteer approach for account: ${accountId}`);
-      const result = await this.directPuppeteerQR(accountId);
-      console.log(
-        `Direct Puppeteer approach successful for account: ${accountId}`
-      );
-      return result;
-    } catch (error) {
-      directError = error; // Now properly scoped
-      console.log(
-        `Direct Puppeteer approach failed for account ${accountId}: ${error.message}`
-      );
-    }
-
-    // Strategy 3: Try absolute minimal settings
-    try {
-      console.log(`Trying minimal settings approach for account: ${accountId}`);
-
-      const minimalClient = new Client({
-        authStrategy: new LocalAuth({
-          clientId: `account_${accountId}`,
-          dataPath: path.join("./data/accounts", accountId),
-        }),
-        puppeteer: {
-          headless: true,
-          args: ["--no-sandbox"],
-        },
-      });
-
-      account.client = minimalClient;
-      this.setupClientEventHandlers(minimalClient, accountId);
-
-      const result = await this.waitForQR(minimalClient, accountId, 1);
-      console.log(
-        `Minimal settings approach successful for account: ${accountId}`
-      );
-      return result;
-    } catch (error) {
-      minimalError = error; // Now properly scoped
-      console.log(
-        `Minimal settings approach failed for account ${accountId}: ${error.message}`
-      );
-    }
-
-    // All strategies failed
-    throw new Error(
-      `All QR generation strategies failed. Simplified: ${simpleError?.message}, Direct: ${directError?.message}, Minimal: ${minimalError?.message}`
-    );
-  }
-
-  /**
-   * Simplified QR waiting with basic timeout
-   */
-  async waitForQR(client, accountId, attempt) {
-    return new Promise((resolve, reject) => {
-      let isResolved = false;
-      let timeoutId;
-
-      const cleanup = () => {
-        if (timeoutId) clearTimeout(timeoutId);
+      // Return immediately - QR code will come via event handler
+      return {
+        accountId,
+        status: "initializing",
+        message: "WhatsApp client is starting up...",
       };
-
-      const resolveOnce = (result) => {
-        if (!isResolved) {
-          isResolved = true;
-          cleanup();
-          resolve(result);
-        }
-      };
-
-      const rejectOnce = (error) => {
-        if (!isResolved) {
-          isResolved = true;
-          cleanup();
-          reject(error);
-        }
-      };
-
-      // QR code received
-      client.once("qr", (qr) => {
-        console.log(
-          `QR code received for account ${accountId} (attempt ${attempt})`
-        );
-        resolveOnce({
-          accountId,
-          qrCode: qr,
-          status: "qr_generated",
-        });
-      });
-
-      // Client ready (already authenticated)
-      client.once("ready", () => {
-        console.log(`Client already authenticated for account ${accountId}`);
-        resolveOnce({
-          accountId,
-          status: "already_authenticated",
-        });
-      });
-
-      // Authentication failure
-      client.once("auth_failure", (msg) => {
-        console.error(`Auth failure for account ${accountId}:`, msg);
-        rejectOnce(new Error(`Authentication failed: ${msg}`));
-      });
-
-      // Client disconnection
-      client.once("disconnected", (reason) => {
-        console.error(`Client disconnected for account ${accountId}:`, reason);
-        rejectOnce(new Error(`Client disconnected: ${reason}`));
-      });
-
-      // Simple timeout - no health checks
-      timeoutId = setTimeout(() => {
-        console.error(
-          `Timeout waiting for QR for account ${accountId} (attempt ${attempt})`
-        );
-        rejectOnce(
-          new Error(
-            `QR generation timed out after 90 seconds (attempt ${attempt})`
-          )
-        );
-      }, 90000); // 90 seconds
-
-      // Initialize client
-      console.log(
-        `Initializing client for account ${accountId} (attempt ${attempt})`
-      );
-      client.initialize().catch((error) => {
-        console.error(
-          `Client initialization error for account ${accountId}:`,
-          error
-        );
-        rejectOnce(new Error(`Client initialization failed: ${error.message}`));
-      });
-    });
-  }
-
-  /**
-   * Alternative QR generation using direct puppeteer approach
-   */
-  async directPuppeteerQR(accountId) {
-    console.log(`Trying direct Puppeteer approach for account: ${accountId}`);
-
-    const puppeteer = require("puppeteer");
-    let browser;
-    let page;
-
-    try {
-      // Launch browser directly
-      browser = await puppeteer.launch({
-        headless: "new",
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-        ],
-        timeout: 60000,
-      });
-
-      page = await browser.newPage();
-
-      // Set a realistic user agent
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      );
-
-      // Navigate to WhatsApp Web
-      console.log("Navigating to WhatsApp Web...");
-      await page.goto("https://web.whatsapp.com", {
-        waitUntil: "networkidle2",
-        timeout: 45000,
-      });
-
-      console.log("Navigated to WhatsApp Web, waiting for QR code...");
-
-      // Try multiple QR code selectors
-      const qrSelectors = [
-        'canvas[aria-label="Scan me!"]',
-        'canvas[role="img"]',
-        "div[data-ref] canvas",
-        "canvas",
-        '[data-testid="qr-code"] canvas',
-      ];
-
-      let qrElement;
-      let usedSelector;
-
-      for (const selector of qrSelectors) {
-        try {
-          console.log(`Trying QR selector: ${selector}`);
-          await page.waitForSelector(selector, { timeout: 10000 });
-          qrElement = await page.$(selector);
-          if (qrElement) {
-            usedSelector = selector;
-            console.log(`Found QR code with selector: ${selector}`);
-            break;
-          }
-        } catch (selectorError) {
-          console.log(`Selector ${selector} failed: ${selectorError.message}`);
-          continue;
-        }
-      }
-
-      if (!qrElement) {
-        // Take a screenshot for debugging
-        await page.screenshot({ path: `debug_${accountId}.png` });
-        throw new Error(
-          "Could not find QR code element with any known selector"
-        );
-      }
-
-      // Get QR code as base64
-      const qrCode = await page.evaluate((selector) => {
-        const canvas = document.querySelector(selector);
-        if (canvas) {
-          return canvas.toDataURL().split(",")[1];
-        }
-        return null;
-      }, usedSelector);
-
-      if (qrCode) {
-        console.log(`Direct QR code generated for account ${accountId}`);
-
-        // IMPORTANT: Send QR code to frontend immediately
-        if (global.mainWindow) {
-          console.log(`Sending QR code to frontend for account ${accountId}`);
-          global.mainWindow.webContents.send("qr:update", {
-            accountId: accountId,
-            qrCode: qrCode,
-          });
-          console.log(`QR code sent to frontend for account ${accountId}`);
-
-          // Add a small delay to ensure the message is processed
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        } else {
-          console.warn("Main window not available for sending QR code");
-        }
-
-        return {
-          accountId,
-          qrCode: qrCode,
-          status: "qr_generated",
-        };
-      } else {
-        throw new Error("Could not extract QR code from canvas element");
-      }
     } catch (error) {
       console.error(
-        `Direct Puppeteer QR failed for account ${accountId}:`,
+        `Simple QR generation failed for account ${accountId}:`,
         error
       );
       throw error;
-    } finally {
-      if (page) {
-        try {
-          await page.close();
-        } catch (e) {
-          console.warn(`Page close warning: ${e.message}`);
-        }
-      }
-      if (browser) {
-        try {
-          await browser.close();
-        } catch (e) {
-          console.warn(`Browser close warning: ${e.message}`);
-        }
-      }
     }
   }
 
   /**
    * Create isolated WhatsApp client with simplified settings
    */
-  async createIsolatedClient(accountId) {
+  async createSimpleIsolatedClient(accountId) {
     const accountDataPath = path.join("./data/accounts", accountId);
     const chromeProfilePath = path.join(
       "./data/chrome_profiles",
@@ -555,52 +324,33 @@ class AccountManager {
       fs.mkdirSync(chromeProfilePath, { recursive: true });
     }
 
-    console.log(
-      `Creating client for account ${accountId} with simplified settings`
-    );
+    console.log(`Creating simple isolated client for account ${accountId}`);
 
-    // Try to find Chrome executable paths
-    const possiblePaths = [
-      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-      process.env.CHROME_BIN,
-      process.env.GOOGLE_CHROME_BIN,
-    ].filter(Boolean);
-
-    let executablePath;
-    for (const path of possiblePaths) {
-      if (fs.existsSync(path)) {
-        executablePath = path;
-        console.log(`Found Chrome at: ${path}`);
-        break;
-      }
-    }
-
-    // Create client with minimal, reliable settings
+    // Let whatsapp-web.js handle everything with increased timeouts
     const client = new Client({
       authStrategy: new LocalAuth({
         clientId: `account_${accountId}`,
         dataPath: accountDataPath,
       }),
       puppeteer: {
-        headless: "new", // Use new headless mode
-        executablePath: executablePath,
+        headless: false, // Show browser for user interaction and debugging
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--no-first-run",
-          "--disable-web-security",
-          "--disable-features=VizDisplayCompositor",
+          "--disable-blink-features=AutomationControlled",
+          "--exclude-switches=enable-automation",
           `--user-data-dir=${chromeProfilePath}`,
         ],
-        ignoreDefaultArgs: ["--disable-extensions"],
-        ignoreHTTPSErrors: true,
-        timeout: 60000,
-        handleSIGINT: false,
-        handleSIGTERM: false,
-        handleSIGHUP: false,
+        ignoreDefaultArgs: ["--enable-automation"],
+        timeout: 120000, // 2 minutes browser launch timeout
+        protocolTimeout: 600000, // 10 minutes protocol timeout for syncing
+      },
+      // Add WhatsApp-specific settings for better reliability
+      webVersionCache: {
+        type: "remote",
+        remotePath:
+          "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html",
       },
     });
 
@@ -627,9 +377,6 @@ class AccountManager {
           console.warn(`Cleanup warning: ${e.message}`);
         }
       }
-
-      // Try the direct Puppeteer approach as fallback
-      return await this.directPuppeteerQR(accountId);
     } catch (error) {
       console.error(`Fallback QR generation failed: ${error.message}`);
       throw error;
